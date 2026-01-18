@@ -1,0 +1,50 @@
+[package]
+name = "bevy-tutti"
+version = "0.1.0"
+edition = "2021"
+description = "Bevy plugin for Tutti - Minimal Bevy integration for real-time audio"
+license = "MIT OR Apache-2.0"
+
+[dependencies]
+# Minimal Bevy (just ECS + App, no rendering)
+bevy_app = { version = "0.17", default-features = false }
+bevy_ecs = { version = "0.17", default-features = false }
+bevy_log = {version = "0.17", default-features = false }
+
+# Tutti audio engine
+tutti = { path = "../tutti" }
+
+[features]
+default = ["tutti/default"]
+
+# Convenience bundles
+minimal = ["tutti/minimal"]
+standard = ["tutti/standard"]
+full = ["tutti/full"]
+
+# Core features
+export = ["tutti/export"]
+recording = ["tutti/recording"]
+butler = ["tutti/butler"]
+
+# Hardware I/O
+audio-input = ["tutti/audio-input"]
+midi-io = ["tutti/midi-io"]
+
+# Audio processing
+soundfont = ["tutti/soundfont"]
+spatial-audio = ["tutti/spatial-audio"]
+simd = ["tutti/simd"]
+neural = ["tutti/neural"]
+
+# Export formats
+encoding = ["tutti/encoding"]
+flac = ["tutti/flac"]
+mp3 = ["tutti/mp3"]
+ogg = ["tutti/ogg"]
+
+# Analysis (currently disabled in Tutti)
+# waveform-analysis = ["tutti/waveform-analysis"]
+# spectrum-analysis = ["tutti/spectrum-analysis"]
+# synth-preview = ["tutti/synth-preview"]
+# analysis = ["tutti/analysis"]
