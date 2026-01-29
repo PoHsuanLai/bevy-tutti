@@ -1,6 +1,6 @@
 //! # bevy-tutti
 //!
-//! Minimal Bevy plugin for [Tutti](https://github.com/yourusername/tutti) audio engine.
+//! Minimal Bevy plugin for [Tutti](https://github.com/PoHsuanLai/tutti) audio engine.
 //!
 //! ## Usage
 //!
@@ -17,11 +17,9 @@
 //! }
 //!
 //! fn control_audio(audio: Res<TuttiEngineResource>) {
-//!     // Access the handle for fluent API
-//!     let handle = audio.handle();
-//!
-//!     handle.transport().set_tempo(128.0);
-//!     handle.transport().play();
+//!     // Direct access to TuttiEngine
+//!     audio.transport().set_tempo(128.0);
+//!     audio.transport().play();
 //! }
 //! ```
 
@@ -31,7 +29,7 @@ use bevy_log::{error, info};
 
 // Re-export Tutti types for convenience
 use std::sync::Arc;
-pub use tutti::{config::TuttiConfig, TuttiEngine};
+pub use tutti::{TuttiEngine, TuttiEngineBuilder};
 
 /// Bevy resource wrapper for TuttiEngine (Arc for cheap cloning)
 #[derive(Resource, Clone)]
@@ -50,22 +48,30 @@ impl std::ops::Deref for TuttiEngineResource {
 /// Creates TuttiEngine, starts audio stream, and inserts it as a Bevy Resource.
 #[derive(Default)]
 pub struct TuttiPlugin {
-    /// Audio backend configuration
-    pub config: TuttiConfig,
+    /// Sample rate (default: system default)
+    pub sample_rate: Option<f64>,
+    /// Number of input channels
+    pub inputs: usize,
+    /// Number of output channels
+    pub outputs: usize,
 }
 
 impl TuttiPlugin {
-    /// Create plugin with custom configuration
-    pub fn with_config(config: TuttiConfig) -> Self {
-        Self { config }
-    }
-
     /// Create plugin with custom sample rate
     pub fn with_sample_rate(sample_rate: f64) -> Self {
         Self {
-            config: TuttiConfig::builder()
-                .sample_rate(sample_rate)
-                .build(),
+            sample_rate: Some(sample_rate),
+            inputs: 2,
+            outputs: 2,
+        }
+    }
+
+    /// Create plugin with custom I/O configuration
+    pub fn with_io(inputs: usize, outputs: usize) -> Self {
+        Self {
+            sample_rate: None,
+            inputs,
+            outputs,
         }
     }
 }
@@ -73,18 +79,26 @@ impl TuttiPlugin {
 impl Plugin for TuttiPlugin {
     fn build(&self, app: &mut App) {
         info!("Initializing Tutti Audio Plugin");
-        info!("   Sample rate: {} Hz", self.config.sample_rate);
 
-        // Create and start Tutti engine
-        match TuttiEngine::builder()
-            .with_config(self.config.clone())
-            .start()
-        {
-            Ok((engine, _handle)) => {
+        if let Some(sr) = self.sample_rate {
+            info!("   Sample rate: {} Hz", sr);
+        }
+
+        // Build Tutti engine with optional configuration
+        let mut builder = TuttiEngine::builder()
+            .inputs(self.inputs)
+            .outputs(self.outputs);
+
+        if let Some(sr) = self.sample_rate {
+            builder = builder.sample_rate(sr);
+        }
+
+        match builder.build() {
+            Ok(engine) => {
                 info!("Tutti Audio Engine started successfully");
 
                 // Insert as Bevy resource
-                app.insert_resource(TuttiEngineResource(engine));
+                app.insert_resource(TuttiEngineResource(Arc::new(engine)));
 
                 info!("Tutti Audio Plugin initialized");
             }

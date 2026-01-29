@@ -33,7 +33,6 @@ midi-io = ["tutti/midi-io"]
 # Audio processing
 soundfont = ["tutti/soundfont"]
 spatial-audio = ["tutti/spatial-audio"]
-simd = ["tutti/simd"]
 neural = ["tutti/neural"]
 wasm = ["tutti/wasm"]
 gpu = ["tutti/gpu"]
