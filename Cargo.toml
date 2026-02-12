@@ -15,24 +15,45 @@ bevy_log = {version = "0.17", default-features = false }
 tutti = { path = "../tutti" }
 
 [features]
-default = ["tutti/default"]
+default = []
 
-# Convenience bundles
-minimal = ["tutti/minimal"]
-standard = ["tutti/standard"]
+# Full feature set
 full = ["tutti/full"]
 
-# Core features
-recording = ["tutti/recording"]
-butler = ["tutti/butler"]
+# Audio formats (aligned with tutti)
+wav = ["tutti/wav"]
+flac = ["tutti/flac"]
+mp3 = ["tutti/mp3"]
+ogg = ["tutti/ogg"]
+files = ["tutti/files"]
 
-# Hardware I/O
-audio-input = ["tutti/audio-input"]
-midi-io = ["tutti/midi-io"]
+# MIDI (aligned with tutti)
+midi = ["tutti/midi"]
+midi-hardware = ["tutti/midi-hardware"]
+mpe = ["tutti/mpe"]
+midi2 = ["tutti/midi2"]
 
-# Audio processing
+# Synth & sampling
+synth = ["tutti/synth"]
 soundfont = ["tutti/soundfont"]
-spatial-audio = ["tutti/spatial-audio"]
+sampler = ["tutti/sampler"]
+
+# DSP
+dsp = ["tutti/dsp"]
+
+# Plugin hosting
+plugin = ["tutti/plugin"]
+vst2 = ["tutti/vst2"]
+vst3 = ["tutti/vst3"]
+clap = ["tutti/clap"]
+
+# Neural & ML
 neural = ["tutti/neural"]
-wasm = ["tutti/wasm"]
-gpu = ["tutti/gpu"]
+burn = ["neural", "tutti/burn"]
+
+# Export & analysis
+export = ["tutti/export"]
+analysis = ["tutti/analysis"]
+
+# Automation
+automation = ["tutti/automation"]
