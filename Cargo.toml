@@ -9,16 +9,28 @@ license = "MIT OR Apache-2.0"
 # Minimal Bevy (just ECS + App, no rendering)
 bevy_app = { version = "0.17", default-features = false }
 bevy_ecs = { version = "0.17", default-features = false }
-bevy_log = {version = "0.17", default-features = false }
+bevy_log = { version = "0.17", default-features = false }
+bevy_asset = { version = "0.17", default-features = false }
+bevy_reflect = { version = "0.17", default-features = false }
+bevy_transform = { version = "0.17", optional = true }
 
 # Tutti audio engine
 tutti = { path = "../tutti" }
+
+# Error handling
+thiserror = "2"
+
+# MIDI UI observer channel
+crossbeam-channel = "0.5"
 
 [features]
 default = []
 
 # Full feature set
-full = ["tutti/full"]
+full = ["tutti/full", "spatial"]
+
+# Spatial audio (requires Transform for position sync)
+spatial = ["tutti/dsp", "bevy_transform"]
 
 # Audio formats (aligned with tutti)
 wav = ["tutti/wav"]
@@ -29,9 +41,9 @@ files = ["tutti/files"]
 
 # MIDI (aligned with tutti)
 midi = ["tutti/midi"]
-midi-hardware = ["tutti/midi-hardware"]
-mpe = ["tutti/mpe"]
-midi2 = ["tutti/midi2"]
+midi-hardware = ["midi", "tutti/midi-hardware"]
+mpe = ["midi", "tutti/mpe"]
+midi2 = ["midi", "tutti/midi2"]
 
 # Synth & sampling
 synth = ["tutti/synth"]
