@@ -30,14 +30,19 @@ pub fn device_state_sync_system(
 
     state.is_running = engine.is_running();
     state.channels = engine.channels();
+}
+
+/// One-shot startup system: enumerate devices once.
+pub fn device_state_init_system(
+    engine: Option<Res<TuttiEngineResource>>,
+    mut state: ResMut<AudioDeviceState>,
+) {
+    let Some(engine) = engine else { return };
 
     if let Ok(name) = engine.current_output_device_name() {
         state.current_device = name;
     }
-
     if let Ok(devices) = tutti::TuttiEngine::list_output_devices() {
-        if devices.len() != state.output_devices.len() {
-            state.output_devices = devices;
-        }
+        state.output_devices = devices;
     }
 }

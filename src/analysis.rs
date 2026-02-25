@@ -12,6 +12,7 @@ pub struct LiveAnalysisData {
     pub pitch: Arc<tutti::PitchResult>,
     pub transients: Arc<Vec<tutti::Transient>>,
     pub waveform: Arc<tutti::WaveformSummary>,
+    pub spectrum: Arc<tutti::SpectrumResult>,
     pub is_live: bool,
 }
 
@@ -21,6 +22,7 @@ impl Default for LiveAnalysisData {
             pitch: Arc::new(tutti::PitchResult::default()),
             transients: Arc::new(Vec::new()),
             waveform: Arc::new(tutti::WaveformSummary::default()),
+            spectrum: Arc::new(tutti::SpectrumResult::default()),
             is_live: false,
         }
     }
@@ -67,4 +69,5 @@ pub fn live_analysis_sync_system(
     analysis.pitch = handle.live_pitch();
     analysis.transients = handle.live_transients();
     analysis.waveform = handle.live_waveform();
+    analysis.spectrum = handle.live_spectrum();
 }

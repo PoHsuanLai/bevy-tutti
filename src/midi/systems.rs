@@ -279,3 +279,93 @@ pub fn midi2_send_system(
         commands.entity(entity).remove::<SendMidi2>();
     }
 }
+
+// =========================================================================
+// MIDI Sequence playback
+// =========================================================================
+
+#[cfg(feature = "midi")]
+use super::components::MidiSequence;
+
+/// Tracks which notes are currently sounding for a [`MidiSequence`].
+#[cfg(feature = "midi")]
+#[derive(Component, Default)]
+pub struct MidiSequenceState {
+    active_notes: std::collections::HashSet<u8>,
+}
+
+/// Auto-inserts [`MidiSequenceState`] on entities that have [`MidiSequence`]
+/// but not yet a state component.
+#[cfg(feature = "midi")]
+pub fn midi_sequence_setup_system(
+    mut commands: Commands,
+    query: Query<Entity, (With<MidiSequence>, Without<MidiSequenceState>)>,
+) {
+    for entity in query.iter() {
+        commands.entity(entity).insert(MidiSequenceState::default());
+    }
+}
+
+/// Ticks all [`MidiSequence`] entities, firing note_on/note_off based on
+/// the transport's current beat position.
+#[cfg(feature = "midi")]
+pub fn midi_sequence_tick_system(
+    engine: Option<Res<TuttiEngineResource>>,
+    mut query: Query<(&MidiSequence, &mut MidiSequenceState)>,
+) {
+    let Some(engine) = engine else { return };
+    let transport = engine.transport();
+
+    if !transport.is_playing() {
+        // All-notes-off when transport is not rolling
+        for (seq, mut state) in query.iter_mut() {
+            for note in state.active_notes.drain() {
+                engine.note_off(seq.target, note);
+            }
+        }
+        return;
+    }
+
+    let beat = transport.current_beat();
+
+    for (seq, mut state) in query.iter_mut() {
+        let local_beat = if seq.loop_enabled && seq.duration_beats > 0.0 {
+            let offset = beat - seq.start_beat;
+            ((offset % seq.duration_beats) + seq.duration_beats) % seq.duration_beats
+        } else {
+            beat - seq.start_beat
+        };
+
+        // Outside range (non-looped)
+        if !seq.loop_enabled && (local_beat < 0.0 || local_beat > seq.duration_beats) {
+            for note in state.active_notes.drain() {
+                engine.note_off(seq.target, note);
+            }
+            continue;
+        }
+
+        // Determine which notes should be active at this beat
+        let mut should_be_active = std::collections::HashSet::new();
+        for n in &seq.notes {
+            if local_beat >= n.start && local_beat < n.start + n.duration {
+                should_be_active.insert(n.note);
+            }
+        }
+
+        // Note-off for notes that ended
+        for &note in &state.active_notes {
+            if !should_be_active.contains(&note) {
+                engine.note_off(seq.target, note);
+            }
+        }
+
+        // Note-on for newly active notes
+        for n in &seq.notes {
+            if should_be_active.contains(&n.note) && !state.active_notes.contains(&n.note) {
+                engine.note_on(seq.target, n.note, n.velocity);
+            }
+        }
+
+        state.active_notes = should_be_active;
+    }
+}

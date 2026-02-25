@@ -483,9 +483,9 @@ pub struct DisableAudioInput;
 /// ```rust,ignore
 /// use tutti::{AutomationEnvelope, AutomationPoint, CurveType};
 ///
-/// let mut envelope = AutomationEnvelope::new("volume");
-/// envelope.add_point(AutomationPoint::new(0.0, 0.0))
-///         .add_point(AutomationPoint::with_curve(4.0, 1.0, CurveType::SCurve));
+/// let envelope = AutomationEnvelope::new("volume")
+///     .with_point(AutomationPoint::new(0.0, 0.0))
+///     .with_point(AutomationPoint::with_curve(4.0, 1.0, CurveType::SCurve));
 ///
 /// commands.spawn(AddAutomationLane { envelope });
 /// ```

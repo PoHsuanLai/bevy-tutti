@@ -73,18 +73,21 @@ pub fn audio_input_sync_system(
     mut state: ResMut<AudioInputState>,
 ) {
     let Some(engine) = engine else { return };
-    let sampler = engine.sampler();
+    state.peak_level = engine.sampler().input_peak_level();
+}
 
-    state.peak_level = sampler.input_peak_level();
-
-    let devices = sampler.list_input_devices();
-    if state.devices.len() != devices.len() {
-        state.devices = devices
-            .into_iter()
-            .map(|d| AudioInputDeviceInfo {
-                index: d.index,
-                name: d.name,
-            })
-            .collect();
-    }
+/// One-shot startup: enumerate input devices once.
+pub fn audio_input_init_system(
+    engine: Option<Res<TuttiEngineResource>>,
+    mut state: ResMut<AudioInputState>,
+) {
+    let Some(engine) = engine else { return };
+    let devices = engine.sampler().list_input_devices();
+    state.devices = devices
+        .into_iter()
+        .map(|d| AudioInputDeviceInfo {
+            index: d.index,
+            name: d.name,
+        })
+        .collect();
 }

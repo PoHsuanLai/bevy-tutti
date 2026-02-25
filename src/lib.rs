@@ -75,11 +75,14 @@ pub use systems::{audio_cleanup_system, audio_parameter_sync_system, audio_playb
 pub use systems::spatial_audio_sync_system;
 
 #[cfg(feature = "midi")]
-pub use midi::components::{MidiReceiver, SendMidi};
+pub use midi::components::{MidiReceiver, MidiSequence, MidiSequenceNote, SendMidi};
 #[cfg(feature = "midi")]
 pub use midi::events::MidiInputEvent;
 #[cfg(feature = "midi")]
-pub use midi::systems::{midi_input_event_system, midi_routing_sync_system, midi_send_system};
+pub use midi::systems::{
+    midi_input_event_system, midi_routing_sync_system, midi_send_system,
+    midi_sequence_setup_system, midi_sequence_tick_system, MidiSequenceState,
+};
 
 #[cfg(feature = "midi-hardware")]
 pub use midi::components::{ConnectMidiDevice, DisconnectMidiDevice};
@@ -321,6 +324,10 @@ impl Plugin for TuttiPlugin {
         app.init_resource::<MasterMeterLevels>();
         app.init_resource::<AudioDeviceState>();
         app.add_systems(
+            bevy_app::Startup,
+            device_state::device_state_init_system,
+        );
+        app.add_systems(
             Update,
             (
                 transport::transport_sync_system,
@@ -403,6 +410,8 @@ impl Plugin for TuttiPlugin {
                         midi::systems::midi_input_event_system,
                         midi::systems::midi_routing_sync_system,
                         midi::systems::midi_send_system,
+                        midi::systems::midi_sequence_setup_system,
+                        midi::systems::midi_sequence_tick_system,
                     )
                         .chain(),
                 );
@@ -482,6 +491,10 @@ impl Plugin for TuttiPlugin {
 
             #[cfg(feature = "sampler")]
             {
+                app.add_systems(
+                    bevy_app::Startup,
+                    audio_input::audio_input_init_system,
+                );
                 app.add_systems(
                     Update,
                     (

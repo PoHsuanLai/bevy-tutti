@@ -47,6 +47,32 @@ impl SendMidi {
     }
 }
 
+/// A single note within a [`MidiSequence`].
+#[cfg(feature = "midi")]
+#[derive(Clone, Debug)]
+pub struct MidiSequenceNote {
+    pub note: u8,
+    pub velocity: u8,
+    /// Start time in beats, relative to the sequence start.
+    pub start: f64,
+    /// Duration in beats.
+    pub duration: f64,
+}
+
+/// Persistent MIDI sequence that fires note_on/note_off based on transport beat.
+///
+/// Unlike [`SendMidi`] (one-shot), this component stays on the entity and is
+/// ticked every frame by [`super::systems::midi_sequence_tick_system`].
+#[cfg(feature = "midi")]
+#[derive(Component)]
+pub struct MidiSequence {
+    pub target: NodeId,
+    pub notes: Vec<MidiSequenceNote>,
+    pub start_beat: f64,
+    pub duration_beats: f64,
+    pub loop_enabled: bool,
+}
+
 /// Routes hardware MIDI input to an audio graph node via `MidiRoutingTable`.
 /// The routing table is rebuilt automatically when these components change.
 #[cfg(feature = "midi")]
