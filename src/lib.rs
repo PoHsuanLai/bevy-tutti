@@ -141,9 +141,9 @@ pub use tutti::{
 pub use tutti::{MidiInputDevice, MidiOutputDevice};
 
 #[cfg(feature = "plugin")]
-pub use components::{LoadPlugin, PluginEditorOpen, PluginEmitter};
+pub use components::{PluginEditorOpen, PluginEmitter};
 #[cfg(feature = "plugin")]
-pub use systems::{plugin_crash_detect_system, plugin_editor_idle_system, plugin_load_system};
+pub use systems::{plugin_crash_detect_system, plugin_editor_idle_system};
 #[cfg(feature = "plugin")]
 pub use tutti::{
     register_all_system_plugins, register_plugin, register_plugin_directory, ParameterFlags,
@@ -449,7 +449,6 @@ impl Plugin for TuttiPlugin {
                 app.add_systems(
                     Update,
                     (
-                        systems::plugin_load_system,
                         systems::plugin_editor_idle_system,
                         systems::plugin_crash_detect_system,
                     ),

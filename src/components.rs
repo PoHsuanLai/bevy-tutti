@@ -245,46 +245,6 @@ impl PlayNeuralEffect {
     }
 }
 
-/// Trigger component: spawn an entity with this to load an audio plugin.
-///
-/// The `plugin_load_system` processes entities with `Added<LoadPlugin>`,
-/// calls the appropriate `engine.vst3/vst2/clap()` builder, creates the
-/// plugin in tutti's graph, and replaces this component with
-/// `AudioEmitter` + `PluginEmitter`.
-///
-/// The plugin format (VST3/VST2/CLAP) is auto-detected from the file extension.
-///
-/// # Examples
-///
-/// ```rust,ignore
-/// // Load a VST3 reverb plugin
-/// commands.spawn(LoadPlugin::new("path/to/Reverb.vst3"));
-///
-/// // Load with initial parameters
-/// commands.spawn(LoadPlugin::new("path/to/Synth.clap").param("cutoff", 0.7));
-/// ```
-#[cfg(feature = "plugin")]
-#[derive(Component)]
-pub struct LoadPlugin {
-    pub path: std::path::PathBuf,
-    pub(crate) params: std::collections::HashMap<String, f32>,
-}
-
-#[cfg(feature = "plugin")]
-impl LoadPlugin {
-    pub fn new(path: impl Into<std::path::PathBuf>) -> Self {
-        Self {
-            path: path.into(),
-            params: std::collections::HashMap::new(),
-        }
-    }
-
-    pub fn param(mut self, name: impl Into<String>, value: f32) -> Self {
-        self.params.insert(name.into(), value);
-        self
-    }
-}
-
 /// Marks an entity as a loaded plugin with a control handle.
 ///
 /// Added automatically by `plugin_load_system`. Use the `handle` to
