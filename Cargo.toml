@@ -58,6 +58,7 @@ plugin = ["tutti/plugin"]
 vst2 = ["tutti/vst2"]
 vst3 = ["tutti/vst3"]
 clap = ["tutti/clap"]
+au = ["tutti/au"]
 
 # Neural & ML
 neural = ["tutti/neural"]

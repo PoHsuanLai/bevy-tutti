@@ -146,8 +146,10 @@ pub use components::{LoadPlugin, PluginEditorOpen, PluginEmitter};
 pub use systems::{plugin_crash_detect_system, plugin_editor_idle_system, plugin_load_system};
 #[cfg(feature = "plugin")]
 pub use tutti::{
-    register_all_system_plugins, register_plugin, register_plugin_directory, ParameterFlags,
-    ParameterInfo, PluginHandle, PluginMetadata,
+    default_database_path, register_all_system_plugins, register_plugin,
+    register_plugin_directory, register_scanned_plugins, scan_system_plugins_async, ParameterFlags,
+    ParameterInfo, PluginDatabase, PluginHandle, PluginMetadata, PluginRecord, PluginScanner,
+    ScanHandle, ScanPhase, ScanProgress, ScanResult, TuttiPluginFormat,
 };
 
 #[cfg(feature = "neural")]
