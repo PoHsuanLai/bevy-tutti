@@ -135,7 +135,7 @@ pub use tutti::{NodeId, TuttiEngine, TuttiEngineBuilder, Wave};
 
 #[cfg(feature = "midi")]
 pub use tutti::{
-    Channel, ChannelVoiceMsg, ControlChange, MidiEvent, MidiHandle, Note,
+    Channel, MidiEvent, MidiHandle, Note,
 };
 #[cfg(feature = "midi-hardware")]
 pub use tutti::{MidiInputDevice, MidiOutputDevice};
