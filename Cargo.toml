@@ -13,6 +13,13 @@ bevy_log = { version = "0.17", default-features = false }
 bevy_asset = { version = "0.17", default-features = false }
 bevy_reflect = { version = "0.17", default-features = false }
 bevy_transform = { version = "0.17", optional = true }
+bevy_window = { version = "0.17", optional = true }
+
+# Shared tokio runtime (from bevy-tokio-tasks)
+bevy-tokio-tasks = { version = "0.17", optional = true }
+
+# Raw window handle for plugin editor parenting
+raw-window-handle = { version = "0.6", optional = true }
 
 # Tutti audio engine
 tutti = { path = "../tutti" }
@@ -54,7 +61,7 @@ sampler = ["tutti/sampler"]
 dsp = ["tutti/dsp"]
 
 # Plugin hosting
-plugin = ["tutti/plugin"]
+plugin = ["tutti/plugin", "dep:bevy-tokio-tasks", "dep:bevy_window", "dep:raw-window-handle"]
 vst2 = ["tutti/vst2"]
 vst3 = ["tutti/vst3"]
 clap = ["tutti/clap"]

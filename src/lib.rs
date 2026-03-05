@@ -141,9 +141,12 @@ pub use tutti::{
 pub use tutti::{MidiInputDevice, MidiOutputDevice};
 
 #[cfg(feature = "plugin")]
-pub use components::{PluginEditorOpen, PluginEmitter};
+pub use components::{ClosePluginEditor, OpenPluginEditor, PluginEditorOpen, PluginEmitter};
 #[cfg(feature = "plugin")]
-pub use systems::{plugin_crash_detect_system, plugin_editor_idle_system};
+pub use systems::{
+    plugin_crash_detect_system, plugin_editor_close_system, plugin_editor_idle_system,
+    plugin_editor_open_system,
+};
 #[cfg(feature = "plugin")]
 pub use tutti::{
     default_database_path, register_all_system_plugins, register_plugin,
@@ -448,9 +451,20 @@ impl Plugin for TuttiPlugin {
 
             #[cfg(feature = "plugin")]
             {
+                if !app.is_plugin_added::<bevy_tokio_tasks::TokioTasksPlugin>() {
+                    app.add_plugins(bevy_tokio_tasks::TokioTasksPlugin::default());
+                }
+
+                app.add_systems(
+                    bevy_app::Startup,
+                    inject_tokio_handle_system,
+                );
+
                 app.add_systems(
                     Update,
                     (
+                        systems::plugin_editor_open_system,
+                        systems::plugin_editor_close_system,
                         systems::plugin_editor_idle_system,
                         systems::plugin_crash_detect_system,
                     ),
@@ -533,4 +547,17 @@ impl Plugin for TuttiPlugin {
             }
         }
     }
+}
+
+/// Startup system that grabs the tokio runtime handle from `TokioTasksRuntime`
+/// and stores it on the `TuttiEngine` for use in async plugin operations.
+#[cfg(feature = "plugin")]
+fn inject_tokio_handle_system(
+    engine: Option<Res<TuttiEngineResource>>,
+    runtime: Res<bevy_tokio_tasks::TokioTasksRuntime>,
+) {
+    let Some(engine) = engine else { return };
+    let handle = runtime.runtime().handle().clone();
+    engine.set_tokio_handle(handle);
+    info!("Injected tokio runtime handle into TuttiEngine");
 }

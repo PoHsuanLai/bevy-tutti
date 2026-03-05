@@ -376,6 +376,86 @@ pub fn plugin_editor_idle_system(
     }
 }
 
+/// Opens plugin editors for entities with `OpenPluginEditor` trigger.
+///
+/// Gets the primary window's raw handle and passes it as the parent for the
+/// plugin editor window. On success, inserts `PluginEditorOpen` marker.
+#[cfg(feature = "plugin")]
+pub fn plugin_editor_open_system(
+    mut commands: Commands,
+    query: Query<(Entity, &PluginEmitter), Added<OpenPluginEditor>>,
+    window_query: Query<&bevy_window::RawHandleWrapperHolder, With<bevy_window::PrimaryWindow>>,
+) {
+    if query.is_empty() {
+        return;
+    }
+
+    // Extract the parent window handle once for all plugin opens this frame.
+    let parent_handle = window_query.single().ok().and_then(|holder| {
+        let guard = holder.0.lock().ok()?;
+        let wrapper = guard.as_ref()?;
+        let raw = wrapper.get_window_handle();
+        extract_native_handle(raw)
+    });
+
+    for (entity, emitter) in query.iter() {
+        commands.entity(entity).remove::<OpenPluginEditor>();
+
+        let Some(handle) = parent_handle else {
+            warn!("Cannot open plugin editor: no primary window handle available");
+            continue;
+        };
+
+        if let Some((_w, _h)) = emitter.handle.open_editor(handle) {
+            bevy_log::info!(
+                "Plugin '{}' editor opened (entity {entity:?})",
+                emitter.handle.name()
+            );
+            commands.entity(entity).insert(PluginEditorOpen);
+        } else {
+            warn!(
+                "Plugin '{}' editor failed to open (entity {entity:?})",
+                emitter.handle.name()
+            );
+        }
+    }
+}
+
+/// Extract platform-specific native window handle as a u64 pointer.
+#[cfg(feature = "plugin")]
+fn extract_native_handle(raw: raw_window_handle::RawWindowHandle) -> Option<u64> {
+    use raw_window_handle::RawWindowHandle;
+    match raw {
+        RawWindowHandle::AppKit(h) => Some(h.ns_view.as_ptr() as u64),
+        RawWindowHandle::Win32(h) => {
+            Some(isize::from(h.hwnd) as u64)
+        }
+        RawWindowHandle::Xlib(h) => Some(h.window as u64),
+        RawWindowHandle::Xcb(h) => Some(h.window.get() as u64),
+        RawWindowHandle::Wayland(h) => Some(h.surface.as_ptr() as u64),
+        _ => None,
+    }
+}
+
+/// Closes plugin editors for entities with `ClosePluginEditor` trigger.
+#[cfg(feature = "plugin")]
+pub fn plugin_editor_close_system(
+    mut commands: Commands,
+    query: Query<(Entity, &PluginEmitter), (Added<ClosePluginEditor>, With<PluginEditorOpen>)>,
+) {
+    for (entity, emitter) in query.iter() {
+        emitter.handle.close_editor();
+        bevy_log::info!(
+            "Plugin '{}' editor closed (entity {entity:?})",
+            emitter.handle.name()
+        );
+        commands
+            .entity(entity)
+            .remove::<ClosePluginEditor>()
+            .remove::<PluginEditorOpen>();
+    }
+}
+
 /// Detects crashed plugins and removes them from the graph.
 ///
 /// Polls `handle.is_crashed()` for all plugin entities. If a plugin has

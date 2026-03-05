@@ -108,7 +108,7 @@ pub fn midi_routing_sync_system(
     engine.midi_routing(|table| {
         table.clear();
         for receiver in all_receivers.iter() {
-            let unit_id = receiver.node_id.value();
+            let unit_id = receiver.node_id.value().into();
             if let Some(ch) = receiver.channel {
                 table.channel(ch, unit_id);
             } else {

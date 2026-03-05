@@ -266,6 +266,19 @@ pub struct PluginEmitter {
 #[derive(Component)]
 pub struct PluginEditorOpen;
 
+/// Trigger component: insert on an entity with `PluginEmitter` to open
+/// the plugin's native GUI editor. Automatically removed after processing.
+#[cfg(feature = "plugin")]
+#[derive(Component)]
+pub struct OpenPluginEditor;
+
+/// Trigger component: insert on an entity with `PluginEmitter` +
+/// `PluginEditorOpen` to close the plugin's native GUI editor.
+/// Automatically removed after processing.
+#[cfg(feature = "plugin")]
+#[derive(Component)]
+pub struct ClosePluginEditor;
+
 /// Trigger component: spawn an entity with this to start recording on a channel.
 ///
 /// The `recording_start_system` processes entities with `Added<StartRecording>`,
