@@ -142,14 +142,12 @@ pub use tutti::{MidiInputDevice, MidiOutputDevice};
 
 #[cfg(feature = "plugin")]
 pub use components::{
-    ClosePluginEditor, OpenPluginEditor, PluginEditorOpen, PluginEditorWindowLink,
-    PluginEditorWindowMarker, PluginEmitter,
+    ClosePluginEditor, OpenPluginEditor, PluginEditorOpen, PluginEmitter,
 };
 #[cfg(feature = "plugin")]
 pub use systems::{
-    plugin_crash_detect_system, plugin_editor_attach_system, plugin_editor_close_system,
-    plugin_editor_idle_system, plugin_editor_prep_system, plugin_editor_spawn_window_system,
-    plugin_editor_window_closed_system,
+    plugin_crash_detect_system, plugin_editor_close_system,
+    plugin_editor_idle_system, plugin_editor_open_system, set_editor_frame,
 };
 #[cfg(feature = "plugin")]
 pub use tutti::{
@@ -480,12 +478,9 @@ impl Plugin for TuttiPlugin {
                 app.add_systems(
                     Update,
                     (
-                        systems::plugin_editor_spawn_window_system,
-                        systems::plugin_editor_prep_system,
-                        systems::plugin_editor_attach_system,
+                        systems::plugin_editor_open_system,
                         systems::plugin_editor_close_system,
                         systems::plugin_editor_idle_system,
-                        systems::plugin_editor_window_closed_system,
                         systems::plugin_crash_detect_system,
                     ),
                 );
