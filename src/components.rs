@@ -279,6 +279,29 @@ pub struct OpenPluginEditor;
 #[derive(Component)]
 pub struct ClosePluginEditor;
 
+/// Links a plugin entity to its dedicated editor window entity.
+#[cfg(feature = "plugin")]
+#[derive(Component)]
+pub struct PluginEditorWindowLink {
+    pub window_entity: Entity,
+}
+
+/// Marker on the editor window entity, linking back to the plugin entity.
+#[cfg(feature = "plugin")]
+#[derive(Component)]
+pub struct PluginEditorWindowMarker {
+    pub plugin_entity: Entity,
+}
+
+/// Holds the saved native handle pointer for deferred editor attachment.
+/// Inserted after `RawHandleWrapper` is read and removed; consumed next frame.
+#[cfg(feature = "plugin")]
+#[derive(Component)]
+pub struct PluginEditorReadyHandle {
+    /// The winit NSView pointer (parent).
+    pub parent_ptr: u64,
+}
+
 /// Trigger component: spawn an entity with this to start recording on a channel.
 ///
 /// The `recording_start_system` processes entities with `Added<StartRecording>`,

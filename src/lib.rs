@@ -141,11 +141,15 @@ pub use tutti::{
 pub use tutti::{MidiInputDevice, MidiOutputDevice};
 
 #[cfg(feature = "plugin")]
-pub use components::{ClosePluginEditor, OpenPluginEditor, PluginEditorOpen, PluginEmitter};
+pub use components::{
+    ClosePluginEditor, OpenPluginEditor, PluginEditorOpen, PluginEditorWindowLink,
+    PluginEditorWindowMarker, PluginEmitter,
+};
 #[cfg(feature = "plugin")]
 pub use systems::{
-    plugin_crash_detect_system, plugin_editor_close_system, plugin_editor_idle_system,
-    plugin_editor_open_system,
+    plugin_crash_detect_system, plugin_editor_attach_system, plugin_editor_close_system,
+    plugin_editor_idle_system, plugin_editor_prep_system, plugin_editor_spawn_window_system,
+    plugin_editor_window_closed_system,
 };
 #[cfg(feature = "plugin")]
 pub use tutti::{
@@ -218,6 +222,14 @@ pub use tutti::{SidechainCompressor, SidechainGate, StereoSidechainCompressor, S
 /// Arc wrapper for `TuttiEngine`, exposed as a Bevy resource.
 #[derive(Resource, Clone)]
 pub struct TuttiEngineResource(pub Arc<TuttiEngine>);
+
+/// Non-Send marker resource that forces plugin editor systems to run on the
+/// main thread. AppKit (macOS), Win32, and X11 window operations must happen
+/// on the main thread. JUCE, VSTGUI, and other plugin GUI frameworks assume
+/// this. Inserted as `insert_non_send_resource` so any system that takes
+/// `NonSend<PluginEditorMainThread>` is pinned to the main thread.
+#[cfg(feature = "plugin")]
+pub struct PluginEditorMainThread;
 
 impl std::ops::Deref for TuttiEngineResource {
     type Target = TuttiEngine;
@@ -455,6 +467,11 @@ impl Plugin for TuttiPlugin {
                     app.add_plugins(bevy_tokio_tasks::TokioTasksPlugin::default());
                 }
 
+                // Insert a NonSend marker so plugin editor systems are
+                // forced onto the main thread. AppKit / JUCE / VSTGUI all
+                // require window operations on the main thread.
+                app.insert_non_send_resource(PluginEditorMainThread);
+
                 app.add_systems(
                     bevy_app::Startup,
                     inject_tokio_handle_system,
@@ -463,9 +480,12 @@ impl Plugin for TuttiPlugin {
                 app.add_systems(
                     Update,
                     (
-                        systems::plugin_editor_open_system,
+                        systems::plugin_editor_spawn_window_system,
+                        systems::plugin_editor_prep_system,
+                        systems::plugin_editor_attach_system,
                         systems::plugin_editor_close_system,
                         systems::plugin_editor_idle_system,
+                        systems::plugin_editor_window_closed_system,
                         systems::plugin_crash_detect_system,
                     ),
                 );

@@ -369,6 +369,7 @@ fn compute_attenuation(
 /// idle ticks to handle redraws and event processing.
 #[cfg(feature = "plugin")]
 pub fn plugin_editor_idle_system(
+    _main_thread: NonSend<crate::PluginEditorMainThread>,
     query: Query<&PluginEmitter, With<PluginEditorOpen>>,
 ) {
     for emitter in query.iter() {
@@ -376,60 +377,146 @@ pub fn plugin_editor_idle_system(
     }
 }
 
-/// Opens plugin editors for entities with `OpenPluginEditor` trigger.
+/// Phase 1: Spawns a dedicated editor window for each plugin with `OpenPluginEditor`.
 ///
-/// Gets the primary window's raw handle and passes it as the parent for the
-/// plugin editor window. On success, inserts `PluginEditorOpen` marker.
+/// Creates a separate Bevy `Window` entity. On the next frame, winit will create
+/// the OS window and insert `RawHandleWrapper`. Phase 2 (`plugin_editor_attach_system`)
+/// detects that and attaches the plugin editor to it.
 #[cfg(feature = "plugin")]
-pub fn plugin_editor_open_system(
+pub fn plugin_editor_spawn_window_system(
+    _main_thread: NonSend<crate::PluginEditorMainThread>,
     mut commands: Commands,
     query: Query<(Entity, &PluginEmitter), Added<OpenPluginEditor>>,
-    window_query: Query<&bevy_window::RawHandleWrapperHolder, With<bevy_window::PrimaryWindow>>,
 ) {
-    if query.is_empty() {
-        return;
-    }
-
-    // Extract the parent window handle once for all plugin opens this frame.
-    let parent_handle = window_query.single().ok().and_then(|holder| {
-        let guard = holder.0.lock().ok()?;
-        let wrapper = guard.as_ref()?;
-        let raw = wrapper.get_window_handle();
-        extract_native_handle(raw)
-    });
-
     for (entity, emitter) in query.iter() {
         commands.entity(entity).remove::<OpenPluginEditor>();
 
-        let Some(handle) = parent_handle else {
-            warn!("Cannot open plugin editor: no primary window handle available");
-            continue;
-        };
+        let plugin_name = emitter.handle.name().to_string();
+        let window_entity = commands
+            .spawn((
+                bevy_window::Window {
+                    title: format!("{plugin_name} - Editor"),
+                    resolution: bevy_window::WindowResolution::new(800, 600),
+                    ..Default::default()
+                },
+                PluginEditorWindowMarker {
+                    plugin_entity: entity,
+                },
+            ))
+            .id();
 
-        if let Some((_w, _h)) = emitter.handle.open_editor(handle) {
-            bevy_log::info!(
-                "Plugin '{}' editor opened (entity {entity:?})",
-                emitter.handle.name()
-            );
-            commands.entity(entity).insert(PluginEditorOpen);
-        } else {
-            warn!(
-                "Plugin '{}' editor failed to open (entity {entity:?})",
-                emitter.handle.name()
-            );
+        commands
+            .entity(entity)
+            .insert(PluginEditorWindowLink { window_entity });
+
+        bevy_log::info!(
+            "Spawned editor window for '{}' (plugin={entity:?}, window={window_entity:?})",
+            plugin_name
+        );
+    }
+}
+
+/// Phase 2a: Saves the native handle and removes `RawHandleWrapper` to prevent
+/// wgpu surface creation. The actual editor attachment happens next frame in
+/// `plugin_editor_attach_system` to let the window fully initialize.
+#[cfg(feature = "plugin")]
+pub fn plugin_editor_prep_system(
+    _main_thread: NonSend<crate::PluginEditorMainThread>,
+    mut commands: Commands,
+    window_query: Query<
+        (Entity, &bevy_window::RawHandleWrapper),
+        (Added<bevy_window::RawHandleWrapper>, With<PluginEditorWindowMarker>),
+    >,
+) {
+    for (window_entity, raw_handle) in window_query.iter() {
+        if let Some(ptr) = raw_handle_to_u64(raw_handle.get_window_handle()) {
+            commands
+                .entity(window_entity)
+                .remove::<bevy_window::RawHandleWrapper>()
+                .insert(PluginEditorReadyHandle { parent_ptr: ptr });
         }
     }
 }
 
-/// Extract platform-specific native window handle as a u64 pointer.
+/// Phase 2b: Attaches the plugin editor to the window one frame after the
+/// handle was saved. Creates a plain intermediary NSView (no layer-backing)
+/// as a child of winit's NSView, following the baseview/nih-plug pattern.
+/// Plugins render into this plain view instead of winit's layer-backed one.
 #[cfg(feature = "plugin")]
-fn extract_native_handle(raw: raw_window_handle::RawWindowHandle) -> Option<u64> {
+pub fn plugin_editor_attach_system(
+    _main_thread: NonSend<crate::PluginEditorMainThread>,
+    mut commands: Commands,
+    window_query: Query<
+        (Entity, &PluginEditorWindowMarker, &PluginEditorReadyHandle),
+    >,
+    plugin_query: Query<&PluginEmitter>,
+) {
+    for (window_entity, marker, ready) in window_query.iter() {
+        commands
+            .entity(window_entity)
+            .remove::<PluginEditorReadyHandle>();
+
+        let Ok(emitter) = plugin_query.get(marker.plugin_entity) else {
+            warn!(
+                "Plugin entity {:?} not found for editor window {window_entity:?}",
+                marker.plugin_entity
+            );
+            continue;
+        };
+
+        // Create a plain intermediary NSView and pass it to the plugin.
+        // winit's NSView has setWantsLayer(true) which makes it layer-backed.
+        // Plugins (VSTGUI, JUCE) expect a plain NSView without layer-backing
+        // and set up their own layers. This follows the baseview/nih-plug pattern.
+        let editor_parent_ptr = create_plain_child_view(ready.parent_ptr);
+
+        bevy_log::info!(
+            "Attaching editor for '{}' to window {window_entity:?} (winit_view={:#x}, plain_child={:#x})",
+            emitter.handle.name(),
+            ready.parent_ptr,
+            editor_parent_ptr,
+        );
+
+        if let Some((w, h)) = emitter.handle.open_editor(editor_parent_ptr) {
+            bevy_log::info!(
+                "Plugin '{}' editor opened ({w}x{h})",
+                emitter.handle.name()
+            );
+            commands
+                .entity(marker.plugin_entity)
+                .insert(PluginEditorOpen);
+
+            // Resize window to match the editor's preferred size.
+            if let Ok(mut window) = commands.get_entity(window_entity) {
+                window.insert(bevy_window::Window {
+                    title: format!("{} - Editor", emitter.handle.name()),
+                    resolution: bevy_window::WindowResolution::new(w, h),
+                    ..Default::default()
+                });
+            }
+
+            // Also resize the plain child view to match.
+            resize_child_view(editor_parent_ptr, w, h);
+        } else {
+            warn!(
+                "Plugin '{}' editor failed to open, despawning editor window",
+                emitter.handle.name()
+            );
+            commands.entity(window_entity).despawn();
+            commands
+                .entity(marker.plugin_entity)
+                .remove::<PluginEditorWindowLink>();
+        }
+    }
+}
+
+/// Extract a u64 native handle pointer from a `RawWindowHandle`.
+#[cfg(feature = "plugin")]
+fn raw_handle_to_u64(raw: raw_window_handle::RawWindowHandle) -> Option<u64> {
     use raw_window_handle::RawWindowHandle;
     match raw {
         RawWindowHandle::AppKit(h) => Some(h.ns_view.as_ptr() as u64),
-        RawWindowHandle::Win32(h) => {
-            Some(isize::from(h.hwnd) as u64)
-        }
+        RawWindowHandle::Win32(h) => Some(isize::from(h.hwnd) as u64),
         RawWindowHandle::Xlib(h) => Some(h.window as u64),
         RawWindowHandle::Xcb(h) => Some(h.window.get() as u64),
         RawWindowHandle::Wayland(h) => Some(h.surface.as_ptr() as u64),
@@ -437,22 +524,120 @@ fn extract_native_handle(raw: raw_window_handle::RawWindowHandle) -> Option<u64>
     }
 }
 
+/// Creates a plain child NSView inside the given parent NSView.
+///
+/// On macOS, winit marks its NSView as layer-backed (`setWantsLayer(true)`).
+/// Plugin editors (VSTGUI, JUCE) expect a plain NSView without layer-backing —
+/// they set up their own CALayer internally. This function creates a bare
+/// `NSView` via `initWithFrame:` and adds it as a subview, following the
+/// baseview/nih-plug pattern.
+///
+/// On non-macOS platforms, returns the parent pointer unchanged.
+#[cfg(feature = "plugin")]
+fn create_plain_child_view(parent_ptr: u64) -> u64 {
+    #[cfg(target_os = "macos")]
+    {
+        use objc2::rc::Retained;
+        use objc2::MainThreadOnly;
+        use objc2_app_kit::NSView;
+        use objc2_foundation::NSRect;
+
+        unsafe {
+            let parent_view: &NSView = &*(parent_ptr as *const NSView);
+            let frame: NSRect = parent_view.frame();
+
+            // Safe: callers use NonSend<PluginEditorMainThread> to pin to main thread.
+            let mtm = objc2::MainThreadMarker::new_unchecked();
+
+            // Create a plain NSView — no setWantsLayer, no layer configuration.
+            let child: Retained<NSView> = NSView::initWithFrame(NSView::alloc(mtm), frame);
+
+            // Add as subview of the winit view.
+            parent_view.addSubview(&child);
+
+            let ptr = Retained::into_raw(child) as u64;
+            bevy_log::info!(
+                "Created plain child NSView at {ptr:#x} (frame={:?})",
+                frame
+            );
+            ptr
+        }
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        parent_ptr
+    }
+}
+
+/// Resizes the plain child NSView to match the plugin editor's size.
+#[cfg(feature = "plugin")]
+fn resize_child_view(child_ptr: u64, width: u32, height: u32) {
+    #[cfg(target_os = "macos")]
+    {
+        use objc2_app_kit::NSView;
+        use objc2_foundation::{NSPoint, NSRect, NSSize};
+
+        unsafe {
+            let child: &NSView = &*(child_ptr as *const NSView);
+            let new_frame = NSRect::new(
+                NSPoint::new(0.0, 0.0),
+                NSSize::new(width as f64, height as f64),
+            );
+            child.setFrame(new_frame);
+        }
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = (child_ptr, width, height);
+    }
+}
+
 /// Closes plugin editors for entities with `ClosePluginEditor` trigger.
 #[cfg(feature = "plugin")]
 pub fn plugin_editor_close_system(
+    _main_thread: NonSend<crate::PluginEditorMainThread>,
     mut commands: Commands,
-    query: Query<(Entity, &PluginEmitter), (Added<ClosePluginEditor>, With<PluginEditorOpen>)>,
+    query: Query<(Entity, &PluginEmitter, Option<&PluginEditorWindowLink>), (Added<ClosePluginEditor>, With<PluginEditorOpen>)>,
 ) {
-    for (entity, emitter) in query.iter() {
+    for (entity, emitter, link) in query.iter() {
         emitter.handle.close_editor();
         bevy_log::info!(
             "Plugin '{}' editor closed (entity {entity:?})",
             emitter.handle.name()
         );
+        if let Some(link) = link {
+            commands.entity(link.window_entity).despawn();
+        }
         commands
             .entity(entity)
             .remove::<ClosePluginEditor>()
-            .remove::<PluginEditorOpen>();
+            .remove::<PluginEditorOpen>()
+            .remove::<PluginEditorWindowLink>();
+    }
+}
+
+/// Detects when a plugin editor window is closed by the user and cleans up.
+#[cfg(feature = "plugin")]
+pub fn plugin_editor_window_closed_system(
+    _main_thread: NonSend<crate::PluginEditorMainThread>,
+    mut commands: Commands,
+    mut removed: RemovedComponents<bevy_window::Window>,
+    plugin_query: Query<(Entity, &PluginEmitter, &PluginEditorWindowLink), With<PluginEditorOpen>>,
+) {
+    for closed_entity in removed.read() {
+        for (plugin_entity, emitter, link) in plugin_query.iter() {
+            if link.window_entity == closed_entity {
+                emitter.handle.close_editor();
+                bevy_log::info!(
+                    "Editor window closed for '{}', closing plugin editor",
+                    emitter.handle.name()
+                );
+                commands
+                    .entity(plugin_entity)
+                    .remove::<PluginEditorOpen>()
+                    .remove::<PluginEditorWindowLink>();
+            }
+        }
     }
 }
 
