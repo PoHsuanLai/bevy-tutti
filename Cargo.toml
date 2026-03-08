@@ -63,6 +63,8 @@ au = ["tutti/au"]
 # Neural & ML
 neural = ["tutti/neural"]
 burn = ["neural", "tutti/burn"]
+ort = ["neural", "tutti/ort"]
+ort-coreml = ["ort", "tutti/ort-coreml"]
 
 # Export & analysis
 export = ["tutti/export"]

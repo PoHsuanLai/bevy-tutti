@@ -113,7 +113,7 @@ pub use components::PlaySoundFont;
 pub use systems::soundfont_playback_system;
 
 #[cfg(feature = "neural")]
-pub use neural_assets::{NeuralModelLoadError, NeuralModelLoader, NeuralModelSource};
+pub use neural_assets::{NeuralModelLoadError, NeuralModelLoader, NeuralModelSource, NeuralStatusResource, neural_status_sync_system};
 #[cfg(all(feature = "neural", feature = "midi"))]
 pub use components::PlayNeuralSynth;
 #[cfg(all(feature = "neural", feature = "midi"))]
@@ -384,11 +384,13 @@ impl Plugin for TuttiPlugin {
             {
                 app.init_asset::<NeuralModelSource>()
                     .register_asset_loader(NeuralModelLoader);
+                app.init_resource::<NeuralStatusResource>();
 
                 #[cfg(feature = "midi")]
                 app.add_systems(Update, systems::neural_synth_playback_system);
 
                 app.add_systems(Update, systems::neural_effect_playback_system);
+                app.add_systems(Update, neural_assets::neural_status_sync_system);
             }
 
             #[cfg(feature = "midi")]

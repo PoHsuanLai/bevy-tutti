@@ -1,7 +1,7 @@
 #[cfg(feature = "midi")]
-use bevy_ecs::prelude::*;
-#[cfg(feature = "midi")]
 use bevy_ecs::message::MessageWriter;
+#[cfg(feature = "midi")]
+use bevy_ecs::prelude::*;
 #[cfg(feature = "midi-hardware")]
 use bevy_log::warn;
 
@@ -97,8 +97,7 @@ pub fn midi_routing_sync_system(
 
     #[cfg(feature = "mpe")]
     {
-        has_changes =
-            has_changes || !mpe_changed.is_empty() || mpe_removed.read().next().is_some();
+        has_changes = has_changes || !mpe_changed.is_empty() || mpe_removed.read().next().is_some();
     }
 
     if !has_changes {
@@ -110,9 +109,9 @@ pub fn midi_routing_sync_system(
         for receiver in all_receivers.iter() {
             let unit_id = receiver.node_id.value();
             if let Some(ch) = receiver.channel {
-                table.channel(ch, unit_id);
+                table.channel(ch, unit_id.into());
             } else {
-                table.fallback(unit_id);
+                table.fallback(unit_id.into());
             }
         }
 
@@ -195,9 +194,7 @@ pub fn midi_device_poll_system(
     state.last_check = Some(now);
 
     let midi = engine.midi();
-    let currently_connected = midi
-        .inner()
-        .and_then(|s| s.connected_device_name());
+    let currently_connected = midi.inner().and_then(|s| s.connected_device_name());
 
     if state.connected.is_some() && currently_connected.is_none() {
         state.connected = None;
@@ -249,10 +246,7 @@ impl MpeExpressionResource {
 }
 
 #[cfg(feature = "mpe")]
-pub(crate) fn mpe_setup_system(
-    engine: Option<Res<TuttiEngineResource>>,
-    mut commands: Commands,
-) {
+pub(crate) fn mpe_setup_system(engine: Option<Res<TuttiEngineResource>>, mut commands: Commands) {
     if let Some(engine) = engine {
         commands.insert_resource(MpeExpressionResource {
             handle: engine.midi().mpe(),
