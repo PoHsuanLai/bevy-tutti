@@ -291,7 +291,7 @@ pub fn neural_synth_playback_system(
             continue;
         };
 
-        let result = engine.neural_synth(&source.name).build();
+        let result = load_neural_model(&engine, source);
         match result {
             Ok((unit, model_id)) => {
                 let node_id = engine.graph_mut(|net| {
@@ -325,7 +325,7 @@ pub fn neural_effect_playback_system(
             continue;
         };
 
-        let result = engine.neural_effect(&source.name).build();
+        let result = load_neural_model(&engine, source);
         match result {
             Ok((unit, model_id)) => {
                 let node_id = engine.graph_mut(|net| {
@@ -341,6 +341,21 @@ pub fn neural_effect_playback_system(
             }
         }
     }
+}
+
+#[cfg(feature = "neural")]
+fn load_neural_model(
+    engine: &crate::TuttiEngineResource,
+    source: &crate::neural_assets::NeuralModelSource,
+) -> Result<(Box<dyn tutti::AudioUnit>, tutti::NeuralModelId), tutti::Error> {
+    #[cfg(feature = "ort")]
+    if source.path.extension().and_then(|e| e.to_str()) == Some("onnx") {
+        return engine.onnx(&source.path).build();
+    }
+
+    Err(tutti::Error::Core(tutti::core::Error::InvalidConfig(
+        format!("Unsupported neural model format: {}", source.path.display()),
+    )))
 }
 
 #[cfg(feature = "spatial")]

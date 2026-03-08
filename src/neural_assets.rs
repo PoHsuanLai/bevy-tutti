@@ -8,6 +8,7 @@ use bevy_reflect::TypePath;
 pub struct NeuralModelSource {
     bytes: Vec<u8>,
     pub name: String,
+    pub path: std::path::PathBuf,
 }
 
 impl NeuralModelSource {
@@ -46,11 +47,12 @@ impl AssetLoader for NeuralModelLoader {
             .unwrap_or("unknown")
             .to_string();
 
-        Ok(NeuralModelSource { bytes, name })
+        let path = load_context.path().to_path_buf();
+        Ok(NeuralModelSource { bytes, name, path })
     }
 
     fn extensions(&self) -> &[&str] {
-        &["mpk"]
+        &["mpk", "onnx"]
     }
 }
 
