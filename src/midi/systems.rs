@@ -118,7 +118,7 @@ pub fn midi_routing_sync_system(
         // MPE receivers route all channels to one synth via fallback
         #[cfg(feature = "mpe")]
         for mpe_recv in all_mpe_receivers.iter() {
-            table.fallback(mpe_recv.node_id.value());
+            table.fallback(mpe_recv.node_id.value().into());
         }
 
         table.commit();
