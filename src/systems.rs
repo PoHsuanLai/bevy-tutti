@@ -542,12 +542,12 @@ pub fn set_editor_frame(nsview_ptr: u64, x: f64, y: f64, w: f64, h: f64, parent_
         use objc2_app_kit::NSView;
         use objc2_foundation::{NSPoint, NSRect, NSSize};
 
-        // Convert top-left origin (egui) to bottom-left origin (NSView).
-        let ns_y = parent_height - y - h;
-
         unsafe {
             let view: &NSView = &*(nsview_ptr as *const NSView);
-            let frame = NSRect::new(NSPoint::new(x, ns_y), NSSize::new(w, h));
+
+            // Winit's content view has isFlipped=true (top-left origin),
+            // matching egui's coordinate system — no Y-flip needed.
+            let frame = NSRect::new(NSPoint::new(x, y), NSSize::new(w, h));
             view.setFrame(frame);
         }
     }
