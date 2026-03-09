@@ -257,14 +257,35 @@ pub struct PluginEmitter {
     pub handle: tutti::PluginHandle,
 }
 
-/// Marker component: present while a plugin's GUI editor is open.
+/// Present while a plugin's GUI editor is open. Carries the native view
+/// pointer and editor dimensions so downstream code can reposition it.
 ///
 /// `plugin_editor_idle_system` calls `handle.editor_idle()` every frame
-/// for entities that have this marker. Add it after calling
-/// `handle.open_editor()`, remove it after `handle.close_editor()`.
+/// for entities that have this component.
 #[cfg(feature = "plugin")]
 #[derive(Component)]
-pub struct PluginEditorOpen;
+pub struct PluginEditorOpen {
+    /// Pointer to the plain child NSView (macOS) or HWND (Windows) that
+    /// the plugin renders into.
+    pub nsview_ptr: u64,
+    /// Editor width in logical pixels as reported by the plugin.
+    pub width: u32,
+    /// Editor height in logical pixels as reported by the plugin.
+    pub height: u32,
+}
+
+/// Trigger component: insert on an entity with `PluginEmitter` to open
+/// the plugin's native GUI editor. Automatically removed after processing.
+#[cfg(feature = "plugin")]
+#[derive(Component)]
+pub struct OpenPluginEditor;
+
+/// Trigger component: insert on an entity with `PluginEmitter` +
+/// `PluginEditorOpen` to close the plugin's native GUI editor.
+/// Automatically removed after processing.
+#[cfg(feature = "plugin")]
+#[derive(Component)]
+pub struct ClosePluginEditor;
 
 /// Trigger component: spawn an entity with this to start recording on a channel.
 ///
