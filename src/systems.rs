@@ -551,7 +551,7 @@ fn remove_child_view(child_ptr: u64) {
 /// Call this each frame from your layout system after computing the editor's
 /// screen rect.
 #[cfg(feature = "plugin")]
-pub fn set_editor_frame(nsview_ptr: u64, x: f64, y: f64, w: f64, h: f64, parent_height: f64) {
+pub fn set_editor_frame(nsview_ptr: u64, x: f64, y: f64, w: f64, h: f64, _parent_height: f64) {
     #[cfg(target_os = "macos")]
     {
         use objc2_app_kit::NSView;
