@@ -1,52 +1,6 @@
 use bevy_ecs::prelude::*;
 use tutti::NodeId;
 
-#[cfg(feature = "midi")]
-use tutti::MidiEvent;
-
-/// One-shot trigger component: removed after `midi_send_system` processes it.
-#[cfg(feature = "midi")]
-#[derive(Component)]
-pub struct SendMidi {
-    pub target: NodeId,
-    pub events: Vec<MidiEvent>,
-}
-
-#[cfg(feature = "midi")]
-impl SendMidi {
-    pub fn note_on(target: NodeId, note: u8, velocity: u8) -> Self {
-        Self {
-            target,
-            events: vec![MidiEvent::note_on(0, 0, note, velocity)],
-        }
-    }
-
-    pub fn note_off(target: NodeId, note: u8) -> Self {
-        Self {
-            target,
-            events: vec![MidiEvent::note_off(0, 0, note, 0)],
-        }
-    }
-
-    pub fn cc(target: NodeId, channel: u8, cc: u8, value: u8) -> Self {
-        Self {
-            target,
-            events: vec![MidiEvent::control_change(0, channel, cc, value)],
-        }
-    }
-
-    pub fn pitch_bend(target: NodeId, channel: u8, value: u16) -> Self {
-        Self {
-            target,
-            events: vec![MidiEvent::pitch_bend(0, channel, value)],
-        }
-    }
-
-    pub fn events(target: NodeId, events: Vec<MidiEvent>) -> Self {
-        Self { target, events }
-    }
-}
-
 /// A single note within a [`MidiSequence`].
 #[cfg(feature = "midi")]
 #[derive(Clone, Debug)]
@@ -61,8 +15,7 @@ pub struct MidiSequenceNote {
 
 /// Persistent MIDI sequence that fires note_on/note_off based on transport beat.
 ///
-/// Unlike [`SendMidi`] (one-shot), this component stays on the entity and is
-/// ticked every frame by [`super::systems::midi_sequence_tick_system`].
+/// Ticked every frame by [`super::systems::midi_sequence_tick_system`].
 #[cfg(feature = "midi")]
 #[derive(Component)]
 pub struct MidiSequence {

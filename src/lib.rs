@@ -53,6 +53,8 @@ mod midi;
 mod soundfont_assets;
 #[cfg(feature = "neural")]
 mod neural_assets;
+#[cfg(all(feature = "plugin", target_os = "macos"))]
+mod plugin_container_view;
 mod systems;
 mod transport;
 
@@ -148,6 +150,7 @@ pub use components::{
 pub use systems::{
     plugin_crash_detect_system, plugin_editor_close_system, plugin_editor_idle_system,
     plugin_editor_open_system, set_editor_frame, set_editor_mask, set_editor_visible,
+    set_editor_z_order,
 };
 #[cfg(feature = "plugin")]
 pub use tutti::{

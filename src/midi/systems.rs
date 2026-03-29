@@ -12,7 +12,7 @@ use crate::TuttiEngineResource;
 use super::events::MidiInputEvent;
 
 #[cfg(feature = "midi")]
-use super::components::{MidiReceiver, SendMidi};
+use super::components::MidiReceiver;
 
 #[cfg(feature = "mpe")]
 use super::components::MpeReceiver;
@@ -123,20 +123,6 @@ pub fn midi_routing_sync_system(
 
         table.commit();
     });
-}
-
-#[cfg(feature = "midi")]
-pub fn midi_send_system(
-    mut commands: Commands,
-    engine: Option<Res<TuttiEngineResource>>,
-    query: Query<(Entity, &SendMidi), Added<SendMidi>>,
-) {
-    let Some(engine) = engine else { return };
-
-    for (entity, send) in query.iter() {
-        engine.queue_midi(send.target, &send.events);
-        commands.entity(entity).remove::<SendMidi>();
-    }
 }
 
 #[cfg(feature = "midi-hardware")]
