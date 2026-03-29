@@ -75,13 +75,13 @@ pub use systems::{audio_cleanup_system, audio_parameter_sync_system, audio_playb
 pub use systems::spatial_audio_sync_system;
 
 #[cfg(feature = "midi")]
-pub use midi::components::{MidiReceiver, MidiSequence, MidiSequenceNote, SendMidi};
+pub use midi::components::{MidiReceiver, MidiSequence, MidiSequenceNote};
 #[cfg(feature = "midi")]
 pub use midi::events::MidiInputEvent;
 #[cfg(feature = "midi")]
 pub use midi::systems::{
-    midi_input_event_system, midi_routing_sync_system, midi_send_system,
-    midi_sequence_setup_system, midi_sequence_tick_system, MidiSequenceState,
+    midi_input_event_system, midi_routing_sync_system, midi_sequence_setup_system,
+    midi_sequence_tick_system, MidiSequenceState,
 };
 
 #[cfg(feature = "midi-hardware")]
@@ -146,8 +146,8 @@ pub use components::{
 };
 #[cfg(feature = "plugin")]
 pub use systems::{
-    plugin_crash_detect_system, plugin_editor_close_system,
-    plugin_editor_idle_system, plugin_editor_open_system, set_editor_frame,
+    plugin_crash_detect_system, plugin_editor_close_system, plugin_editor_idle_system,
+    plugin_editor_open_system, set_editor_frame, set_editor_mask, set_editor_visible,
 };
 #[cfg(feature = "plugin")]
 pub use tutti::{
@@ -426,7 +426,6 @@ impl Plugin for TuttiPlugin {
                     (
                         midi::systems::midi_input_event_system,
                         midi::systems::midi_routing_sync_system,
-                        midi::systems::midi_send_system,
                         midi::systems::midi_sequence_setup_system,
                         midi::systems::midi_sequence_tick_system,
                     )

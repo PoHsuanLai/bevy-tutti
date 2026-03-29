@@ -461,10 +461,7 @@ fn raw_handle_to_u64(raw: raw_window_handle::RawWindowHandle) -> Option<u64> {
 /// On macOS, winit marks its NSView as layer-backed (`setWantsLayer(true)`).
 /// Plugin editors (VSTGUI, JUCE) expect a plain NSView without layer-backing —
 /// they set up their own CALayer internally. This function creates a bare
-/// `NSView` via `initWithFrame:` and adds it as a subview, following the
-/// baseview/nih-plug pattern.
-///
-/// On non-macOS platforms, returns the parent pointer unchanged.
+/// `NSView` via `initWithFrame:` and adds it as a subview.
 #[cfg(feature = "plugin")]
 fn create_plain_child_view(parent_ptr: u64) -> u64 {
     #[cfg(target_os = "macos")]
@@ -478,13 +475,9 @@ fn create_plain_child_view(parent_ptr: u64) -> u64 {
             let parent_view: &NSView = &*(parent_ptr as *const NSView);
             let frame: NSRect = parent_view.frame();
 
-            // Safe: callers use NonSend<PluginEditorMainThread> to pin to main thread.
             let mtm = objc2::MainThreadMarker::new_unchecked();
 
-            // Create a plain NSView — no setWantsLayer, no layer configuration.
             let child: Retained<NSView> = NSView::initWithFrame(NSView::alloc(mtm), frame);
-
-            // Add as subview of the winit view.
             parent_view.addSubview(&child);
 
             let ptr = Retained::into_raw(child) as u64;
@@ -544,10 +537,7 @@ fn remove_child_view(child_ptr: u64) {
 
 /// Reposition a plugin editor's NSView within the main window.
 ///
-/// Coordinates use **top-left origin** (matching egui/screen coords) in
-/// **physical pixels**. Pass the main window's physical height as
-/// `parent_height` for the Y-axis flip (NSView uses bottom-left origin).
-///
+/// Coordinates use **top-left origin** (matching egui/screen coords).
 /// Call this each frame from your layout system after computing the editor's
 /// screen rect.
 #[cfg(feature = "plugin")]
@@ -568,7 +558,92 @@ pub fn set_editor_frame(nsview_ptr: u64, x: f64, y: f64, w: f64, h: f64, _parent
     }
     #[cfg(not(target_os = "macos"))]
     {
-        let _ = (nsview_ptr, x, y, w, h, parent_height);
+        let _ = (nsview_ptr, x, y, w, h, _parent_height);
+    }
+}
+
+/// Show or hide a plugin editor's NSView.
+#[cfg(feature = "plugin")]
+pub fn set_editor_visible(nsview_ptr: u64, visible: bool) {
+    #[cfg(target_os = "macos")]
+    {
+        use objc2_app_kit::NSView;
+
+        unsafe {
+            let view: &NSView = &*(nsview_ptr as *const NSView);
+            view.setHidden(!visible);
+        }
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = (nsview_ptr, visible);
+    }
+}
+
+/// Apply a CALayer mask to a plugin editor's NSView so that the given
+/// rects (in view-local coordinates) are clipped out, revealing egui
+/// content underneath.
+///
+/// Each rect is `(x, y, w, h)` in the NSView's local coordinate space.
+/// If `clip_rects` is empty, any existing mask is removed.
+#[cfg(feature = "plugin")]
+pub fn set_editor_mask(nsview_ptr: u64, view_w: f64, view_h: f64, clip_rects: &[(f64, f64, f64, f64)]) {
+    #[cfg(target_os = "macos")]
+    {
+        use objc2_app_kit::NSView;
+        use objc2_core_graphics::CGMutablePath;
+        use objc2_foundation::{NSPoint, NSRect, NSSize};
+        use objc2_quartz_core::CAShapeLayer;
+
+        unsafe {
+            let view: &NSView = &*(nsview_ptr as *const NSView);
+
+            // Ensure the view is layer-backed so we can apply a mask.
+            view.setWantsLayer(true);
+
+            let Some(layer) = view.layer() else { return };
+
+            if clip_rects.is_empty() {
+                // No occlusion — remove mask to show everything.
+                layer.setMask(None);
+                return;
+            }
+
+            // Build a path: full view bounds MINUS each clip rect.
+            // Using even-odd fill rule, adding the full rect then the clip rects
+            // creates "holes" where the clip rects are.
+            let path = CGMutablePath::new();
+
+            // Full view bounds (visible area)
+            let bounds = NSRect::new(
+                NSPoint::new(0.0, 0.0),
+                NSSize::new(view_w, view_h),
+            );
+            CGMutablePath::add_rect(Some(&path), std::ptr::null(), bounds);
+
+            // Each clip rect becomes a hole (even-odd rule).
+            // Clip rects arrive in top-left origin (egui coords) but CALayer
+            // uses bottom-left origin — flip Y.
+            for &(x, y, w, h) in clip_rects {
+                let flipped_y = view_h - y - h;
+                let clip = NSRect::new(
+                    NSPoint::new(x, flipped_y),
+                    NSSize::new(w, h),
+                );
+                CGMutablePath::add_rect(Some(&path), std::ptr::null(), clip);
+            }
+
+            // Create mask layer with even-odd fill
+            let mask_layer = CAShapeLayer::new();
+            mask_layer.setPath(Some(&path));
+            mask_layer.setFillRule(objc2_quartz_core::kCAFillRuleEvenOdd);
+
+            layer.setMask(Some(&mask_layer));
+        }
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = (nsview_ptr, view_w, view_h, clip_rects);
     }
 }
 
