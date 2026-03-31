@@ -265,14 +265,19 @@ pub struct PluginEmitter {
 #[cfg(feature = "plugin")]
 #[derive(Component)]
 pub struct PluginEditorOpen {
-    /// Pointer to the plain child NSView (macOS) or HWND (Windows) that
-    /// the plugin renders into.
-    pub nsview_ptr: u64,
+    /// Handle to the platform-native editor view.
+    pub view_handle: crate::plugin_editor_platform::EditorViewHandle,
     /// Editor width in logical pixels as reported by the plugin.
     pub width: u32,
     /// Editor height in logical pixels as reported by the plugin.
     pub height: u32,
 }
+
+/// Stores the native parent view pointer (the main window's content view)
+/// so the frontend can pass it to `reorder_editor_views()`.
+#[cfg(feature = "plugin")]
+#[derive(Resource)]
+pub struct PluginEditorParentView(pub u64);
 
 /// Trigger component: insert on an entity with `PluginEmitter` to open
 /// the plugin's native GUI editor. Automatically removed after processing.

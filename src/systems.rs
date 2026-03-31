@@ -259,11 +259,18 @@ pub fn soundfont_playback_system(
 
         let settings = tutti::SynthesizerSettings::new(engine.sample_rate() as i32);
         let midi_registry = engine.graph_mut(|net| net.midi_registry().clone());
-        let mut unit = tutti::SoundFontUnit::with_midi(
+        let mut unit = match tutti::SoundFontUnit::with_midi(
             source.soundfont().clone(),
             &settings,
             midi_registry,
-        );
+        ) {
+            Ok(unit) => unit,
+            Err(e) => {
+                bevy_log::error!("Failed to create SoundFontUnit: {}", e);
+                commands.entity(entity).remove::<crate::components::PlaySoundFont>();
+                continue;
+            }
+        };
         unit.program_change(play.channel, play.preset);
 
         let node_id = engine.graph_mut(|net| net.add(unit).master());
@@ -393,17 +400,15 @@ pub fn plugin_editor_idle_system(
 }
 
 /// Opens a plugin editor embedded in the primary window.
-///
-/// Creates a plain child NSView inside the main window's NSView and passes
-/// it to the plugin's `open_editor()`. The child view has no layer-backing,
-/// following the baseview/nih-plug pattern that JUCE and VSTGUI expect.
 #[cfg(feature = "plugin")]
 pub fn plugin_editor_open_system(
     _main_thread: NonSend<crate::PluginEditorMainThread>,
     mut commands: Commands,
+    platform: Option<Res<crate::plugin_editor_platform::PluginEditorPlatformRes>>,
     query: Query<(Entity, &PluginEmitter), Added<OpenPluginEditor>>,
     primary_window: Query<&bevy_window::RawHandleWrapper, With<bevy_window::PrimaryWindow>>,
 ) {
+    let Some(platform) = platform else { return };
     let Ok(raw_handle) = primary_window.single() else {
         return;
     };
@@ -411,24 +416,27 @@ pub fn plugin_editor_open_system(
         return;
     };
 
+    commands.insert_resource(crate::components::PluginEditorParentView(parent_ptr));
+
     for (entity, emitter) in query.iter() {
         commands.entity(entity).remove::<OpenPluginEditor>();
 
-        let child_ptr = create_plain_child_view(parent_ptr);
+        let view_handle = platform.create_view(parent_ptr);
 
         bevy_log::info!(
-            "Opening editor for '{}' in primary window (parent={parent_ptr:#x}, child={child_ptr:#x})",
+            "Opening editor for '{}' (parent={parent_ptr:#x}, view={:#x})",
             emitter.handle.name(),
+            view_handle.0,
         );
 
-        if let Some((w, h)) = emitter.handle.open_editor(child_ptr) {
+        if let Some((w, h)) = emitter.handle.open_editor(view_handle.0) {
             bevy_log::info!(
                 "Plugin '{}' editor opened ({w}x{h})",
                 emitter.handle.name()
             );
-            resize_child_view(child_ptr, w, h);
+            platform.resize_view(view_handle, w, h);
             commands.entity(entity).insert(PluginEditorOpen {
-                nsview_ptr: child_ptr,
+                view_handle,
                 width: w,
                 height: h,
             });
@@ -437,7 +445,7 @@ pub fn plugin_editor_open_system(
                 "Plugin '{}' editor failed to open",
                 emitter.handle.name()
             );
-            remove_child_view(child_ptr);
+            platform.destroy_view(view_handle);
         }
     }
 }
@@ -456,208 +464,18 @@ fn raw_handle_to_u64(raw: raw_window_handle::RawWindowHandle) -> Option<u64> {
     }
 }
 
-/// Creates a plain child NSView inside the given parent NSView.
-///
-/// On macOS, winit marks its NSView as layer-backed (`setWantsLayer(true)`).
-/// Plugin editors (VSTGUI, JUCE) expect a plain NSView without layer-backing —
-/// they set up their own CALayer internally. This function creates a bare
-/// `NSView` via `initWithFrame:` and adds it as a subview.
-#[cfg(feature = "plugin")]
-fn create_plain_child_view(parent_ptr: u64) -> u64 {
-    #[cfg(target_os = "macos")]
-    {
-        use objc2::rc::Retained;
-        use objc2::MainThreadOnly;
-        use objc2_app_kit::NSView;
-        use objc2_foundation::NSRect;
-
-        unsafe {
-            let parent_view: &NSView = &*(parent_ptr as *const NSView);
-            let frame: NSRect = parent_view.frame();
-
-            let mtm = objc2::MainThreadMarker::new_unchecked();
-
-            let child: Retained<NSView> = NSView::initWithFrame(NSView::alloc(mtm), frame);
-            parent_view.addSubview(&child);
-
-            let ptr = Retained::into_raw(child) as u64;
-            bevy_log::info!(
-                "Created plain child NSView at {ptr:#x} (frame={:?})",
-                frame
-            );
-            ptr
-        }
-    }
-    #[cfg(not(target_os = "macos"))]
-    {
-        parent_ptr
-    }
-}
-
-/// Resizes the plain child NSView to match the plugin editor's size.
-#[cfg(feature = "plugin")]
-fn resize_child_view(child_ptr: u64, width: u32, height: u32) {
-    #[cfg(target_os = "macos")]
-    {
-        use objc2_app_kit::NSView;
-        use objc2_foundation::{NSPoint, NSRect, NSSize};
-
-        unsafe {
-            let child: &NSView = &*(child_ptr as *const NSView);
-            let new_frame = NSRect::new(
-                NSPoint::new(0.0, 0.0),
-                NSSize::new(width as f64, height as f64),
-            );
-            child.setFrame(new_frame);
-        }
-    }
-    #[cfg(not(target_os = "macos"))]
-    {
-        let _ = (child_ptr, width, height);
-    }
-}
-
-/// Removes the child NSView from its parent (calls `removeFromSuperview`).
-#[cfg(feature = "plugin")]
-fn remove_child_view(child_ptr: u64) {
-    #[cfg(target_os = "macos")]
-    {
-        use objc2_app_kit::NSView;
-
-        unsafe {
-            let child: &NSView = &*(child_ptr as *const NSView);
-            child.removeFromSuperview();
-        }
-    }
-    #[cfg(not(target_os = "macos"))]
-    {
-        let _ = child_ptr;
-    }
-}
-
-/// Reposition a plugin editor's NSView within the main window.
-///
-/// Coordinates use **top-left origin** (matching egui/screen coords).
-/// Call this each frame from your layout system after computing the editor's
-/// screen rect.
-#[cfg(feature = "plugin")]
-pub fn set_editor_frame(nsview_ptr: u64, x: f64, y: f64, w: f64, h: f64, _parent_height: f64) {
-    #[cfg(target_os = "macos")]
-    {
-        use objc2_app_kit::NSView;
-        use objc2_foundation::{NSPoint, NSRect, NSSize};
-
-        unsafe {
-            let view: &NSView = &*(nsview_ptr as *const NSView);
-
-            // Winit's content view has isFlipped=true (top-left origin),
-            // matching egui's coordinate system — no Y-flip needed.
-            let frame = NSRect::new(NSPoint::new(x, y), NSSize::new(w, h));
-            view.setFrame(frame);
-        }
-    }
-    #[cfg(not(target_os = "macos"))]
-    {
-        let _ = (nsview_ptr, x, y, w, h, _parent_height);
-    }
-}
-
-/// Show or hide a plugin editor's NSView.
-#[cfg(feature = "plugin")]
-pub fn set_editor_visible(nsview_ptr: u64, visible: bool) {
-    #[cfg(target_os = "macos")]
-    {
-        use objc2_app_kit::NSView;
-
-        unsafe {
-            let view: &NSView = &*(nsview_ptr as *const NSView);
-            view.setHidden(!visible);
-        }
-    }
-    #[cfg(not(target_os = "macos"))]
-    {
-        let _ = (nsview_ptr, visible);
-    }
-}
-
-/// Apply a CALayer mask to a plugin editor's NSView so that the given
-/// rects (in view-local coordinates) are clipped out, revealing egui
-/// content underneath.
-///
-/// Each rect is `(x, y, w, h)` in the NSView's local coordinate space.
-/// If `clip_rects` is empty, any existing mask is removed.
-#[cfg(feature = "plugin")]
-pub fn set_editor_mask(nsview_ptr: u64, view_w: f64, view_h: f64, clip_rects: &[(f64, f64, f64, f64)]) {
-    #[cfg(target_os = "macos")]
-    {
-        use objc2_app_kit::NSView;
-        use objc2_core_graphics::CGMutablePath;
-        use objc2_foundation::{NSPoint, NSRect, NSSize};
-        use objc2_quartz_core::CAShapeLayer;
-
-        unsafe {
-            let view: &NSView = &*(nsview_ptr as *const NSView);
-
-            // Ensure the view is layer-backed so we can apply a mask.
-            view.setWantsLayer(true);
-
-            let Some(layer) = view.layer() else { return };
-
-            if clip_rects.is_empty() {
-                // No occlusion — remove mask to show everything.
-                layer.setMask(None);
-                return;
-            }
-
-            // Build a path: full view bounds MINUS each clip rect.
-            // Using even-odd fill rule, adding the full rect then the clip rects
-            // creates "holes" where the clip rects are.
-            let path = CGMutablePath::new();
-
-            // Full view bounds (visible area)
-            let bounds = NSRect::new(
-                NSPoint::new(0.0, 0.0),
-                NSSize::new(view_w, view_h),
-            );
-            CGMutablePath::add_rect(Some(&path), std::ptr::null(), bounds);
-
-            // Each clip rect becomes a hole (even-odd rule).
-            // Clip rects arrive in top-left origin (egui coords) but CALayer
-            // uses bottom-left origin — flip Y.
-            for &(x, y, w, h) in clip_rects {
-                let flipped_y = view_h - y - h;
-                let clip = NSRect::new(
-                    NSPoint::new(x, flipped_y),
-                    NSSize::new(w, h),
-                );
-                CGMutablePath::add_rect(Some(&path), std::ptr::null(), clip);
-            }
-
-            // Create mask layer with even-odd fill
-            let mask_layer = CAShapeLayer::new();
-            mask_layer.setPath(Some(&path));
-            mask_layer.setFillRule(objc2_quartz_core::kCAFillRuleEvenOdd);
-
-            layer.setMask(Some(&mask_layer));
-        }
-    }
-    #[cfg(not(target_os = "macos"))]
-    {
-        let _ = (nsview_ptr, view_w, view_h, clip_rects);
-    }
-}
-
 /// Closes plugin editors for entities with `ClosePluginEditor` trigger.
-/// Detaches the child NSView from the primary window.
 #[cfg(feature = "plugin")]
 pub fn plugin_editor_close_system(
     _main_thread: NonSend<crate::PluginEditorMainThread>,
     mut commands: Commands,
+    platform: Option<Res<crate::plugin_editor_platform::PluginEditorPlatformRes>>,
     query: Query<(Entity, &PluginEmitter, &PluginEditorOpen), Added<ClosePluginEditor>>,
 ) {
+    let Some(platform) = platform else { return };
     for (entity, emitter, editor) in query.iter() {
         emitter.handle.close_editor();
-        remove_child_view(editor.nsview_ptr);
+        platform.destroy_view(editor.view_handle);
         bevy_log::info!(
             "Plugin '{}' editor closed (entity {entity:?})",
             emitter.handle.name()

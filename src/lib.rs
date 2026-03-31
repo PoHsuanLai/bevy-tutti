@@ -53,8 +53,8 @@ mod midi;
 mod soundfont_assets;
 #[cfg(feature = "neural")]
 mod neural_assets;
-#[cfg(all(feature = "plugin", target_os = "macos"))]
-mod plugin_container_view;
+#[cfg(feature = "plugin")]
+pub mod plugin_editor_platform;
 mod systems;
 mod transport;
 
@@ -144,13 +144,16 @@ pub use tutti::{MidiInputDevice, MidiOutputDevice};
 
 #[cfg(feature = "plugin")]
 pub use components::{
-    ClosePluginEditor, OpenPluginEditor, PluginEditorOpen, PluginEmitter,
+    ClosePluginEditor, OpenPluginEditor, PluginEditorOpen, PluginEditorParentView, PluginEmitter,
+};
+#[cfg(feature = "plugin")]
+pub use plugin_editor_platform::{
+    create_platform, EditorViewHandle, PluginEditorPlatform, PluginEditorPlatformRes,
 };
 #[cfg(feature = "plugin")]
 pub use systems::{
     plugin_crash_detect_system, plugin_editor_close_system, plugin_editor_idle_system,
-    plugin_editor_open_system, set_editor_frame, set_editor_mask, set_editor_visible,
-    set_editor_z_order,
+    plugin_editor_open_system,
 };
 #[cfg(feature = "plugin")]
 pub use tutti::{
@@ -469,9 +472,8 @@ impl Plugin for TuttiPlugin {
                     app.add_plugins(bevy_tokio_tasks::TokioTasksPlugin::default());
                 }
 
-                // Insert a NonSend marker so plugin editor systems are
-                // forced onto the main thread. AppKit / JUCE / VSTGUI all
-                // require window operations on the main thread.
+                // Insert the platform implementation and main-thread marker.
+                app.insert_resource(PluginEditorPlatformRes(create_platform()));
                 app.insert_non_send_resource(PluginEditorMainThread);
 
                 app.add_systems(
@@ -488,6 +490,27 @@ impl Plugin for TuttiPlugin {
                         systems::plugin_crash_detect_system,
                     ),
                 );
+
+                // Close all plugin editors on app exit. Must run on the main
+                // thread (CLAP/JUCE require GUI ops on main thread) and BEFORE
+                // resources are dropped.
+                fn cleanup_plugin_editors_on_exit(
+                    _main_thread: NonSend<crate::PluginEditorMainThread>,
+                    exit: bevy_ecs::prelude::MessageReader<bevy_app::AppExit>,
+                    platform: Option<Res<PluginEditorPlatformRes>>,
+                    editors: Query<(&PluginEmitter, &PluginEditorOpen)>,
+                ) {
+                    if exit.is_empty() {
+                        return;
+                    }
+                    let Some(platform) = platform else { return };
+                    for (emitter, editor) in editors.iter() {
+                        emitter.handle.close_editor();
+                        platform.set_visible(editor.view_handle, false);
+                    }
+                    platform.cleanup();
+                }
+                app.add_systems(bevy_app::Last, cleanup_plugin_editors_on_exit);
             }
 
             #[cfg(feature = "sampler")]
