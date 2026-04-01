@@ -399,53 +399,97 @@ pub fn plugin_editor_idle_system(
     }
 }
 
-/// Opens a plugin editor embedded in the primary window.
+/// Phase 1 of plugin editor opening: spawn a Bevy Window for the editor.
+///
+/// The native handle won't be available until the next frame, so we insert
+/// `PendingPluginEditor` and let `plugin_editor_attach_system` finish the job.
 #[cfg(feature = "plugin")]
 pub fn plugin_editor_open_system(
-    _main_thread: NonSend<crate::PluginEditorMainThread>,
     mut commands: Commands,
-    platform: Option<Res<crate::plugin_editor_platform::PluginEditorPlatformRes>>,
     query: Query<(Entity, &PluginEmitter), Added<OpenPluginEditor>>,
-    primary_window: Query<&bevy_window::RawHandleWrapper, With<bevy_window::PrimaryWindow>>,
 ) {
-    let Some(platform) = platform else { return };
-    let Ok(raw_handle) = primary_window.single() else {
-        return;
-    };
-    let Some(parent_ptr) = raw_handle_to_u64(raw_handle.get_window_handle()) else {
-        return;
-    };
-
-    commands.insert_resource(crate::components::PluginEditorParentView(parent_ptr));
+    use bevy_window::{Window, WindowResolution};
 
     for (entity, emitter) in query.iter() {
         commands.entity(entity).remove::<OpenPluginEditor>();
 
-        let view_handle = platform.create_view(parent_ptr);
+        let window_entity = commands
+            .spawn(Window {
+                title: format!("{}", emitter.handle.name()),
+                resolution: WindowResolution::new(800, 600),
+                decorations: true,
+                visible: false,
+                ..Default::default()
+            })
+            .id();
 
         bevy_log::info!(
-            "Opening editor for '{}' (parent={parent_ptr:#x}, view={:#x})",
+            "Spawning editor window for '{}' (window={window_entity:?})",
             emitter.handle.name(),
-            view_handle.0,
         );
 
-        if let Some((w, h)) = emitter.handle.open_editor(view_handle.0) {
+        commands
+            .entity(entity)
+            .insert(PendingPluginEditor { window_entity });
+    }
+}
+
+/// Phase 2: once the native handle is available, call `open_editor` on the plugin.
+#[cfg(feature = "plugin")]
+pub fn plugin_editor_attach_system(
+    _main_thread: NonSend<crate::PluginEditorMainThread>,
+    mut commands: Commands,
+    pending: Query<(Entity, &PluginEmitter, &PendingPluginEditor)>,
+    mut windows: Query<&mut bevy_window::Window>,
+    handles: Query<&bevy_window::RawHandleWrapper>,
+    primary: Query<&bevy_window::RawHandleWrapper, With<bevy_window::PrimaryWindow>>,
+) {
+    for (entity, emitter, pend) in pending.iter() {
+        let Ok(raw_handle) = handles.get(pend.window_entity) else {
+            continue; // handle not ready yet
+        };
+        let Some(view_ptr) = raw_handle_to_u64(raw_handle.get_window_handle()) else {
+            continue;
+        };
+
+        if let Some((w, h)) = emitter.handle.open_editor(view_ptr) {
             bevy_log::info!(
                 "Plugin '{}' editor opened ({w}x{h})",
                 emitter.handle.name()
             );
-            platform.resize_view(view_handle, w, h);
-            commands.entity(entity).insert(PluginEditorOpen {
-                view_handle,
-                width: w,
-                height: h,
-            });
+
+            // Resize and show the window.
+            if let Ok(mut win) = windows.get_mut(pend.window_entity) {
+                win.resolution
+                    .set(w as f32, h as f32);
+                win.visible = true;
+            }
+
+            // Attach as child of primary window so they move together.
+            if let Ok(parent_handle) = primary.single() {
+                attach_child_window(raw_handle, parent_handle);
+            }
+
+            // Remove RawHandleWrapper so Bevy's renderer doesn't create a
+            // wgpu surface on this window (the plugin owns the rendering).
+            commands
+                .entity(pend.window_entity)
+                .remove::<bevy_window::RawHandleWrapper>();
+
+            commands.entity(entity).remove::<PendingPluginEditor>().insert(
+                PluginEditorOpen {
+                    editor_window: pend.window_entity,
+                    width: w,
+                    height: h,
+                },
+            );
         } else {
             warn!(
                 "Plugin '{}' editor failed to open",
                 emitter.handle.name()
             );
-            platform.destroy_view(view_handle);
+            commands.entity(pend.window_entity).despawn();
+            commands.entity(entity).remove::<PendingPluginEditor>();
         }
     }
 }
@@ -464,18 +508,44 @@ fn raw_handle_to_u64(raw: raw_window_handle::RawWindowHandle) -> Option<u64> {
     }
 }
 
+/// Attach a child window to a parent window so they move together.
+#[cfg(feature = "plugin")]
+fn attach_child_window(
+    child: &bevy_window::RawHandleWrapper,
+    parent: &bevy_window::RawHandleWrapper,
+) {
+    #[cfg(target_os = "macos")]
+    {
+        use objc2_app_kit::{NSView, NSWindowOrderingMode};
+
+        unsafe {
+            let child_view: &NSView =
+                &*(raw_handle_to_u64(child.get_window_handle()).unwrap() as *const NSView);
+            let parent_view: &NSView =
+                &*(raw_handle_to_u64(parent.get_window_handle()).unwrap() as *const NSView);
+
+            let child_window = child_view.window().expect("child must be in a window");
+            let parent_window = parent_view.window().expect("parent must be in a window");
+
+            parent_window.addChildWindow_ordered(&child_window, NSWindowOrderingMode::Above);
+        }
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = (child, parent);
+    }
+}
+
 /// Closes plugin editors for entities with `ClosePluginEditor` trigger.
 #[cfg(feature = "plugin")]
 pub fn plugin_editor_close_system(
     _main_thread: NonSend<crate::PluginEditorMainThread>,
     mut commands: Commands,
-    platform: Option<Res<crate::plugin_editor_platform::PluginEditorPlatformRes>>,
     query: Query<(Entity, &PluginEmitter, &PluginEditorOpen), Added<ClosePluginEditor>>,
 ) {
-    let Some(platform) = platform else { return };
     for (entity, emitter, editor) in query.iter() {
         emitter.handle.close_editor();
-        platform.destroy_view(editor.view_handle);
+        commands.entity(editor.editor_window).despawn();
         bevy_log::info!(
             "Plugin '{}' editor closed (entity {entity:?})",
             emitter.handle.name()

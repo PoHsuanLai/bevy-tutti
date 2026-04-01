@@ -257,27 +257,28 @@ pub struct PluginEmitter {
     pub handle: tutti::PluginHandle,
 }
 
-/// Present while a plugin's GUI editor is open. Carries the native view
-/// pointer and editor dimensions so downstream code can reposition it.
+/// Present while a plugin's GUI editor is open in a separate Bevy window.
 ///
 /// `plugin_editor_idle_system` calls `handle.editor_idle()` every frame
 /// for entities that have this component.
 #[cfg(feature = "plugin")]
 #[derive(Component)]
 pub struct PluginEditorOpen {
-    /// Handle to the platform-native editor view.
-    pub view_handle: crate::plugin_editor_platform::EditorViewHandle,
+    /// The Bevy Window entity hosting the plugin editor.
+    pub editor_window: Entity,
     /// Editor width in logical pixels as reported by the plugin.
     pub width: u32,
     /// Editor height in logical pixels as reported by the plugin.
     pub height: u32,
 }
 
-/// Stores the native parent view pointer (the main window's content view)
-/// so the frontend can pass it to `reorder_editor_views()`.
+/// Intermediate state: a Window has been spawned but `open_editor` hasn't
+/// been called yet (waiting for the native handle to become available).
 #[cfg(feature = "plugin")]
-#[derive(Resource)]
-pub struct PluginEditorParentView(pub u64);
+#[derive(Component)]
+pub struct PendingPluginEditor {
+    pub window_entity: Entity,
+}
 
 /// Trigger component: insert on an entity with `PluginEmitter` to open
 /// the plugin's native GUI editor. Automatically removed after processing.
