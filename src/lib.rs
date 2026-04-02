@@ -53,6 +53,8 @@ mod midi;
 mod soundfont_assets;
 #[cfg(feature = "neural")]
 mod neural_assets;
+#[cfg(feature = "plugin")]
+pub mod native_window;
 mod systems;
 mod transport;
 

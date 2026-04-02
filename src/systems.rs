@@ -448,7 +448,7 @@ pub fn plugin_editor_attach_system(
         let Ok(raw_handle) = handles.get(pend.window_entity) else {
             continue; // handle not ready yet
         };
-        let Some(view_ptr) = raw_handle_to_u64(raw_handle.get_window_handle()) else {
+        let Some(view_ptr) = native_view_ptr(raw_handle.get_window_handle()) else {
             continue;
         };
 
@@ -494,47 +494,9 @@ pub fn plugin_editor_attach_system(
     }
 }
 
-/// Extract a u64 native handle pointer from a `RawWindowHandle`.
+// Platform helpers re-exported for use in this module.
 #[cfg(feature = "plugin")]
-fn raw_handle_to_u64(raw: raw_window_handle::RawWindowHandle) -> Option<u64> {
-    use raw_window_handle::RawWindowHandle;
-    match raw {
-        RawWindowHandle::AppKit(h) => Some(h.ns_view.as_ptr() as u64),
-        RawWindowHandle::Win32(h) => Some(isize::from(h.hwnd) as u64),
-        RawWindowHandle::Xlib(h) => Some(h.window as u64),
-        RawWindowHandle::Xcb(h) => Some(h.window.get() as u64),
-        RawWindowHandle::Wayland(h) => Some(h.surface.as_ptr() as u64),
-        _ => None,
-    }
-}
-
-/// Attach a child window to a parent window so they move together.
-#[cfg(feature = "plugin")]
-fn attach_child_window(
-    child: &bevy_window::RawHandleWrapper,
-    parent: &bevy_window::RawHandleWrapper,
-) {
-    #[cfg(target_os = "macos")]
-    {
-        use objc2_app_kit::{NSView, NSWindowOrderingMode};
-
-        unsafe {
-            let child_view: &NSView =
-                &*(raw_handle_to_u64(child.get_window_handle()).unwrap() as *const NSView);
-            let parent_view: &NSView =
-                &*(raw_handle_to_u64(parent.get_window_handle()).unwrap() as *const NSView);
-
-            let child_window = child_view.window().expect("child must be in a window");
-            let parent_window = parent_view.window().expect("parent must be in a window");
-
-            parent_window.addChildWindow_ordered(&child_window, NSWindowOrderingMode::Above);
-        }
-    }
-    #[cfg(not(target_os = "macos"))]
-    {
-        let _ = (child, parent);
-    }
-}
+use crate::native_window::{attach_child_window, native_view_ptr};
 
 /// Closes plugin editors for entities with `ClosePluginEditor` trigger.
 #[cfg(feature = "plugin")]
@@ -545,7 +507,7 @@ pub fn plugin_editor_close_system(
 ) {
     for (entity, emitter, editor) in query.iter() {
         emitter.handle.close_editor();
-        commands.entity(editor.editor_window).despawn();
+        commands.entity(editor.editor_window).try_despawn();
         bevy_log::info!(
             "Plugin '{}' editor closed (entity {entity:?})",
             emitter.handle.name()
