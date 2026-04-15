@@ -42,7 +42,7 @@ pub fn device_state_init_system(
     if let Ok(name) = engine.current_output_device_name() {
         state.current_device = name;
     }
-    if let Ok(devices) = tutti::TuttiEngine::list_output_devices() {
-        state.output_devices = devices;
+    if let Ok(devices) = tutti::TuttiEngine::output_devices() {
+        state.output_devices = devices.map(|(_, name)| name).collect();
     }
 }
