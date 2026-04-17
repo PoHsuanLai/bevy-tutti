@@ -39,10 +39,10 @@ pub fn device_state_init_system(
 ) {
     let Some(engine) = engine else { return };
 
-    if let Ok(name) = engine.current_output_device_name() {
+    if let Ok(name) = engine.device_name() {
         state.current_device = name;
     }
-    if let Ok(devices) = tutti::TuttiEngine::output_devices() {
+    if let Ok(devices) = tutti::TuttiEngine::devices() {
         state.output_devices = devices.map(|(_, name)| name).collect();
     }
 }

@@ -146,14 +146,14 @@ pub fn audio_cleanup_system(
 /// Syncs `TimeStretch` component changes to the lock-free `TimeStretchControl` atomics.
 ///
 /// When `TimeStretch` is mutated, this system writes the new values to the
-/// `Arc<AtomicFloat>` handles, which the audio thread reads lock-free.
+/// `Arc<AtomicF32>` handles, which the audio thread reads lock-free.
 #[cfg(feature = "sampler")]
 pub fn time_stretch_sync_system(
     query: Query<(&TimeStretch, &TimeStretchControl), Changed<TimeStretch>>,
 ) {
     for (ts, control) in query.iter() {
-        control.stretch_factor.set(ts.stretch_factor);
-        control.pitch_cents.set(ts.pitch_cents);
+        control.stretch_factor.store(ts.stretch_factor, tutti::Ordering::Release);
+        control.pitch_cents.store(ts.pitch_cents, tutti::Ordering::Release);
     }
 }
 

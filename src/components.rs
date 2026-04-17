@@ -531,13 +531,13 @@ pub struct TimeStretch {
 /// Lock-free control handles for a time-stretched audio entity.
 ///
 /// Inserted automatically by `audio_playback_system` when `TimeStretch` is
-/// present. Holds `Arc<AtomicFloat>` handles for real-time parameter updates.
+/// present. Holds `Arc<AtomicF32>` handles for real-time parameter updates.
 /// Updated by `time_stretch_sync_system` when `TimeStretch` changes.
 #[cfg(feature = "sampler")]
 #[derive(Component)]
 pub struct TimeStretchControl {
-    pub(crate) stretch_factor: std::sync::Arc<tutti::AtomicFloat>,
-    pub(crate) pitch_cents: std::sync::Arc<tutti::AtomicFloat>,
+    pub(crate) stretch_factor: std::sync::Arc<tutti::AtomicF32>,
+    pub(crate) pitch_cents: std::sync::Arc<tutti::AtomicF32>,
 }
 
 /// Trigger component: spawn an entity with this to add a compressor to the graph.
