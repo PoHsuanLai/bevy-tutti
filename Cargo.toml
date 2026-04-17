@@ -56,7 +56,6 @@ files = ["tutti/files"]
 midi = ["tutti/midi"]
 midi-hardware = ["midi", "tutti/midi-hardware"]
 mpe = ["midi", "tutti/mpe"]
-midi2 = ["midi", "tutti/midi2"]
 
 # Synth & sampling
 synth = ["tutti/synth"]

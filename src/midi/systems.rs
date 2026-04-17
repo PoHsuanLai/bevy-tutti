@@ -17,9 +17,6 @@ use super::components::MidiReceiver;
 #[cfg(feature = "mpe")]
 use super::components::MpeReceiver;
 
-#[cfg(feature = "midi2")]
-use super::components::SendMidi2;
-
 #[cfg(feature = "midi-hardware")]
 use super::components::{ConnectMidiDevice, DisconnectMidiDevice};
 #[cfg(feature = "midi-hardware")]
@@ -237,26 +234,6 @@ pub(crate) fn mpe_setup_system(engine: Option<Res<TuttiEngineResource>>, mut com
         commands.insert_resource(MpeExpressionResource {
             handle: engine.midi().mpe(),
         });
-    }
-}
-
-#[cfg(feature = "midi2")]
-pub fn midi2_send_system(
-    mut commands: Commands,
-    engine: Option<Res<TuttiEngineResource>>,
-    query: Query<(Entity, &SendMidi2), Added<SendMidi2>>,
-) {
-    let Some(engine) = engine else { return };
-    let midi_handle = engine.midi();
-    let Some(midi_system) = midi_handle.inner() else {
-        return;
-    };
-
-    for (entity, send) in query.iter() {
-        for event in &send.events {
-            midi_system.push_midi2_event(send.port, *event);
-        }
-        commands.entity(entity).remove::<SendMidi2>();
     }
 }
 

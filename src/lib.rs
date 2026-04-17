@@ -100,13 +100,6 @@ pub use midi::systems::MpeExpressionResource;
 #[cfg(feature = "mpe")]
 pub use tutti::{MpeHandle, MpeMode, MpeZone, MpeZoneConfig};
 
-#[cfg(feature = "midi2")]
-pub use midi::components::SendMidi2;
-#[cfg(feature = "midi2")]
-pub use midi::systems::midi2_send_system;
-#[cfg(feature = "midi2")]
-pub use tutti::{Midi2Event, Midi2Handle, Midi2MessageType, UnifiedMidiEvent};
-
 #[cfg(feature = "soundfont")]
 pub use soundfont_assets::{Sf2LoadError, Sf2Loader, SoundFontSource};
 #[cfg(feature = "soundfont")]
@@ -455,11 +448,6 @@ impl Plugin for TuttiPlugin {
                     bevy_app::Startup,
                     midi::systems::mpe_setup_system,
                 );
-            }
-
-            #[cfg(feature = "midi2")]
-            {
-                app.add_systems(Update, midi::systems::midi2_send_system);
             }
 
             #[cfg(feature = "plugin")]
