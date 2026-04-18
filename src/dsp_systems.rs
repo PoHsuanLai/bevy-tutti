@@ -16,25 +16,13 @@ pub fn dsp_compressor_system(
 
     for (entity, add) in query.iter() {
         let node_id = engine.graph_mut(|net| {
-            if add.stereo {
-                let comp = tutti::StereoSidechainCompressor::new(
-                    add.threshold_db,
-                    add.ratio,
-                    add.attack,
-                    add.release,
-                )
-                .with_makeup(add.makeup_db);
-                net.add(comp).id()
+            let comp = if add.stereo {
+                tutti::Compressor::stereo(add.threshold_db, add.ratio, add.attack, add.release)
             } else {
-                let comp = tutti::SidechainCompressor::builder()
-                    .threshold_db(add.threshold_db)
-                    .ratio(add.ratio)
-                    .attack_seconds(add.attack)
-                    .release_seconds(add.release)
-                    .makeup_gain_db(add.makeup_db)
-                    .build();
-                net.add(comp).id()
+                tutti::Compressor::mono(add.threshold_db, add.ratio, add.attack, add.release)
             }
+            .with_makeup(add.makeup_db);
+            net.add(comp).id()
         });
 
         commands
@@ -59,23 +47,12 @@ pub fn dsp_gate_system(
 
     for (entity, add) in query.iter() {
         let node_id = engine.graph_mut(|net| {
-            if add.stereo {
-                let gate = tutti::StereoSidechainGate::new(
-                    add.threshold_db,
-                    add.attack,
-                    add.hold,
-                    add.release,
-                );
-                net.add(gate).id()
+            let gate = if add.stereo {
+                tutti::Gate::stereo(add.threshold_db, add.attack, add.hold, add.release)
             } else {
-                let gate = tutti::SidechainGate::builder()
-                    .threshold_db(add.threshold_db)
-                    .attack_seconds(add.attack)
-                    .hold_seconds(add.hold)
-                    .release_seconds(add.release)
-                    .build();
-                net.add(gate).id()
-            }
+                tutti::Gate::mono(add.threshold_db, add.attack, add.hold, add.release)
+            };
+            net.add(gate).id()
         });
 
         commands

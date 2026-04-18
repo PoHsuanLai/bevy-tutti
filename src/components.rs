@@ -543,8 +543,8 @@ pub struct TimeStretchControl {
 /// Trigger component: spawn an entity with this to add a compressor to the graph.
 ///
 /// The `dsp_compressor_system` processes entities with `Added<AddCompressor>`,
-/// creates a `SidechainCompressor` or `StereoSidechainCompressor`, adds it to
-/// the graph, and inserts `AudioEmitter`.
+/// creates a `Compressor` (mono or stereo via `Compressor::mono`/`Compressor::stereo`),
+/// adds it to the graph, and inserts `AudioEmitter`.
 #[cfg(feature = "dsp")]
 #[derive(Component)]
 pub struct AddCompressor {
@@ -604,7 +604,7 @@ impl AddCompressor {
 /// Trigger component: spawn an entity with this to add a gate to the graph.
 ///
 /// The `dsp_gate_system` processes entities with `Added<AddGate>`,
-/// creates a `SidechainGate` or `StereoSidechainGate`, adds it to
+/// creates a `Gate` (mono or stereo via `Gate::mono`/`Gate::stereo`), adds it to
 /// the graph, and inserts `AudioEmitter`.
 #[cfg(feature = "dsp")]
 #[derive(Component)]

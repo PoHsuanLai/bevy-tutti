@@ -210,7 +210,7 @@ pub use components::{AddCompressor, AddGate};
 #[cfg(feature = "dsp")]
 pub use dsp_systems::{dsp_compressor_system, dsp_gate_system};
 #[cfg(feature = "dsp")]
-pub use tutti::{SidechainCompressor, SidechainGate, StereoSidechainCompressor, StereoSidechainGate};
+pub use tutti::{Compressor, Gate};
 
 /// Arc wrapper for `TuttiEngine`, exposed as a Bevy resource.
 #[derive(Resource, Clone)]
