@@ -200,7 +200,7 @@ pub use components::{TimeStretch, TimeStretchControl};
 #[cfg(feature = "sampler")]
 pub use systems::time_stretch_sync_system;
 #[cfg(feature = "sampler")]
-pub use tutti::TimeStretchUnit;
+pub use tutti::sampler::stretch::Unit as TimeStretchUnit;
 
 pub use components::AddLfo;
 pub use dsp_systems::dsp_lfo_system;

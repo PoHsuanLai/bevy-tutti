@@ -52,7 +52,7 @@ pub fn audio_playback_system(
 
             if let Some(ts) = ts {
                 let wrapped =
-                    tutti::TimeStretchUnit::new(Box::new(sampler), sample_rate);
+                    tutti::sampler::stretch::Unit::new(Box::new(sampler), sample_rate);
                 wrapped.set_stretch_factor(ts.stretch_factor);
                 wrapped.set_pitch_cents(ts.pitch_cents);
                 let control = TimeStretchControl {
@@ -648,4 +648,4 @@ pub fn recording_stop_system(
 /// Consume and remove this component to process the recorded data.
 #[cfg(feature = "sampler")]
 #[derive(Component)]
-pub struct RecordingResult(pub tutti::RecordedData);
+pub struct RecordingResult(pub tutti::sampler::capture::Recorded);

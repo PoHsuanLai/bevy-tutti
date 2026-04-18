@@ -302,21 +302,21 @@ pub struct ClosePluginEditor;
 #[derive(Component)]
 pub struct StartRecording {
     pub channel_index: usize,
-    pub source: tutti::RecordingSource,
-    pub mode: tutti::RecordingMode,
+    pub source: tutti::sampler::capture::Source,
+    pub mode: tutti::sampler::capture::Mode,
 }
 
 #[cfg(feature = "sampler")]
 impl StartRecording {
-    pub fn new(channel_index: usize, source: tutti::RecordingSource) -> Self {
+    pub fn new(channel_index: usize, source: tutti::sampler::capture::Source) -> Self {
         Self {
             channel_index,
             source,
-            mode: tutti::RecordingMode::Replace,
+            mode: tutti::sampler::capture::Mode::Replace,
         }
     }
 
-    pub fn mode(mut self, mode: tutti::RecordingMode) -> Self {
+    pub fn mode(mut self, mode: tutti::sampler::capture::Mode) -> Self {
         self.mode = mode;
         self
     }
@@ -341,8 +341,8 @@ pub struct StopRecording {
 #[derive(Component)]
 pub struct RecordingActive {
     pub channel_index: usize,
-    pub source: tutti::RecordingSource,
-    pub mode: tutti::RecordingMode,
+    pub source: tutti::sampler::capture::Source,
+    pub mode: tutti::sampler::capture::Mode,
 }
 
 /// Trigger component: spawn an entity with this to enable live analysis.
