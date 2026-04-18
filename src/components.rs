@@ -362,8 +362,8 @@ pub struct DisableLiveAnalysis;
 /// Trigger component: spawn an entity with this to start an offline export.
 ///
 /// The `export_start_system` processes entities with `Added<StartExport>`,
-/// builds an `ExportBuilder`, calls `.start(path)`, and replaces this
-/// component with `ExportInProgress`.
+/// builds a `GraphExport`, calls `.to_file(path).spawn()`, and replaces
+/// this component with `ExportInProgress`.
 #[cfg(feature = "export")]
 #[derive(Component)]
 pub struct StartExport {
@@ -371,7 +371,7 @@ pub struct StartExport {
     pub duration_seconds: Option<f64>,
     pub duration_beats: Option<(f64, f64)>,
     pub format: Option<tutti::AudioFormat>,
-    pub normalization: Option<tutti::NormalizationMode>,
+    pub normalization: Option<tutti::Normalize>,
 }
 
 #[cfg(feature = "export")]
@@ -401,7 +401,7 @@ impl StartExport {
         self
     }
 
-    pub fn normalization(mut self, mode: tutti::NormalizationMode) -> Self {
+    pub fn normalization(mut self, mode: tutti::Normalize) -> Self {
         self.normalization = Some(mode);
         self
     }

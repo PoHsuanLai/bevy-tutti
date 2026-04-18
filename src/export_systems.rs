@@ -4,7 +4,7 @@ use crate::TuttiEngineResource;
 
 #[derive(Component)]
 pub struct ExportInProgress {
-    pub(crate) handle: tutti::ExportHandle,
+    pub(crate) handle: tutti::ExportHandle<tutti::Written>,
 }
 
 #[derive(Component)]
@@ -38,7 +38,7 @@ pub fn export_start_system(
             builder = builder.normalize(normalization);
         }
 
-        let handle = builder.start(&start.path);
+        let handle = builder.to_file(&start.path).spawn();
 
         bevy_log::info!("Export started: {}", start.path.display());
 
@@ -54,23 +54,24 @@ pub fn export_poll_system(
     mut query: Query<(Entity, &mut ExportInProgress)>,
 ) {
     for (entity, mut export) in query.iter_mut() {
-        match export.handle.progress() {
-            tutti::ExportStatus::Complete => {
+        match export.handle.poll() {
+            tutti::ExportState::Done(_written) => {
                 bevy_log::info!("Export complete (entity {entity:?})");
                 commands
                     .entity(entity)
                     .remove::<ExportInProgress>()
                     .insert(ExportComplete);
             }
-            tutti::ExportStatus::Failed(error) => {
+            tutti::ExportState::Failed(error) => {
                 bevy_log::error!("Export failed (entity {entity:?}): {error}");
                 commands
                     .entity(entity)
                     .remove::<ExportInProgress>()
-                    .insert(ExportFailed { error });
+                    .insert(ExportFailed {
+                        error: error.to_string(),
+                    });
             }
-            tutti::ExportStatus::Running(_) | tutti::ExportStatus::Pending => {
-            }
+            tutti::ExportState::Running { .. } | tutti::ExportState::Pending => {}
         }
     }
 }

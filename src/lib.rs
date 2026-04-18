@@ -176,7 +176,7 @@ pub use export_systems::{
     export_poll_system, export_start_system, ExportComplete, ExportFailed, ExportInProgress,
 };
 #[cfg(feature = "export")]
-pub use tutti::{AudioFormat, ExportHandle, ExportStatus, NormalizationMode};
+pub use tutti::{AudioFormat, ExportHandle, ExportState, Normalize, Written};
 
 #[cfg(feature = "sampler")]
 pub use audio_input::{
