@@ -2,7 +2,7 @@ use bevy_asset::Handle;
 use bevy_ecs::prelude::*;
 use tutti::NodeId;
 
-use crate::assets::TuttiAudioSource;
+use tutti::WaveAsset;
 
 /// Marks an entity as an audio emitter with a live node in tutti's graph.
 ///
@@ -101,7 +101,7 @@ impl Default for AudioVolume {
 /// ```
 #[derive(Component)]
 pub struct PlayAudio {
-    pub source: Handle<TuttiAudioSource>,
+    pub source: Handle<WaveAsset>,
     pub looping: bool,
     pub gain: f32,
     pub speed: f32,
@@ -109,7 +109,7 @@ pub struct PlayAudio {
 }
 
 impl PlayAudio {
-    pub fn once(source: Handle<TuttiAudioSource>) -> Self {
+    pub fn once(source: Handle<WaveAsset>) -> Self {
         Self {
             source,
             looping: false,
@@ -119,7 +119,7 @@ impl PlayAudio {
         }
     }
 
-    pub fn looping(source: Handle<TuttiAudioSource>) -> Self {
+    pub fn looping(source: Handle<WaveAsset>) -> Self {
         Self {
             source,
             looping: true,
@@ -180,14 +180,14 @@ pub struct DespawnOnFinish;
 #[cfg(feature = "soundfont")]
 #[derive(Component)]
 pub struct PlaySoundFont {
-    pub source: Handle<crate::soundfont_assets::SoundFontSource>,
+    pub source: Handle<tutti::SoundFontAsset>,
     pub preset: i32,
     pub channel: i32,
 }
 
 #[cfg(feature = "soundfont")]
 impl PlaySoundFont {
-    pub fn new(source: Handle<crate::soundfont_assets::SoundFontSource>) -> Self {
+    pub fn new(source: Handle<tutti::SoundFontAsset>) -> Self {
         Self { source, preset: 0, channel: 0 }
     }
 
@@ -217,12 +217,12 @@ impl PlaySoundFont {
 #[cfg(all(feature = "neural", feature = "midi"))]
 #[derive(Component)]
 pub struct PlayNeuralSynth {
-    pub source: Handle<crate::neural_assets::NeuralModelSource>,
+    pub source: Handle<tutti::NeuralModel>,
 }
 
 #[cfg(all(feature = "neural", feature = "midi"))]
 impl PlayNeuralSynth {
-    pub fn new(source: Handle<crate::neural_assets::NeuralModelSource>) -> Self {
+    pub fn new(source: Handle<tutti::NeuralModel>) -> Self {
         Self { source }
     }
 }
@@ -235,12 +235,12 @@ impl PlayNeuralSynth {
 #[cfg(feature = "neural")]
 #[derive(Component)]
 pub struct PlayNeuralEffect {
-    pub source: Handle<crate::neural_assets::NeuralModelSource>,
+    pub source: Handle<tutti::NeuralModel>,
 }
 
 #[cfg(feature = "neural")]
 impl PlayNeuralEffect {
-    pub fn new(source: Handle<crate::neural_assets::NeuralModelSource>) -> Self {
+    pub fn new(source: Handle<tutti::NeuralModel>) -> Self {
         Self { source }
     }
 }

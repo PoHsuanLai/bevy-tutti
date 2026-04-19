@@ -13,7 +13,7 @@ pub fn automation_lane_system(
     for (entity, add) in query.iter() {
         let lane = engine.automation_lane(add.envelope.clone());
 
-        let node_id = engine.graph_mut(|net| net.add(lane).id());
+        let node_id = engine.graph_mut(|net| net.inner_mut().push(Box::new(lane)));
 
         commands
             .entity(entity)

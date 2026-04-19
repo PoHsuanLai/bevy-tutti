@@ -6,7 +6,7 @@ use bevy_ecs::prelude::*;
 use bevy_log::warn;
 
 #[cfg(feature = "sampler")]
-use crate::assets::TuttiAudioSource;
+use tutti::WaveAsset;
 #[cfg(any(feature = "sampler", feature = "soundfont", feature = "neural", feature = "plugin"))]
 use crate::components::*;
 #[cfg(any(feature = "sampler", feature = "soundfont", feature = "neural", feature = "plugin"))]
@@ -26,7 +26,7 @@ use crate::components::{TimeStretch, TimeStretchControl};
 #[cfg(feature = "sampler")]
 pub fn audio_playback_system(
     mut commands: Commands,
-    audio_assets: Res<Assets<TuttiAudioSource>>,
+    audio_assets: Res<Assets<WaveAsset>>,
     engine: Option<Res<TuttiEngineResource>>,
     query: Query<(Entity, &PlayAudio), Added<PlayAudio>>,
     ts_query: Query<&TimeStretch>,
@@ -35,11 +35,11 @@ pub fn audio_playback_system(
 
     for (entity, play) in query.iter() {
         let Some(source) = audio_assets.get(&play.source) else {
-            warn!("TuttiAudioSource not loaded yet for entity {entity:?}, will retry next frame");
+            warn!("WaveAsset not loaded yet for entity {entity:?}, will retry next frame");
             continue;
         };
 
-        let wave = source.wave().clone();
+        let wave = source.0.clone();
         let gain = play.gain;
         let speed = play.speed;
         let looping = play.looping;
@@ -59,10 +59,12 @@ pub fn audio_playback_system(
                     stretch_factor: wrapped.stretch_factor_arc(),
                     pitch_cents: wrapped.pitch_cents_arc(),
                 };
-                let id = net.add(wrapped).master();
+                let id = net.inner_mut().push(Box::new(wrapped));
+                net.inner_mut().pipe_output(id);
                 (id, Some(control))
             } else {
-                let id = net.add(sampler).master();
+                let id = net.inner_mut().push(Box::new(sampler));
+                net.inner_mut().pipe_output(id);
                 (id, None)
             }
         });
@@ -182,10 +184,11 @@ pub fn spatial_audio_sync_system(
                     warn!("Failed to create SpatialPannerNode");
                     return None;
                 };
-                let panner_id = net.add(panner).id();
+                let inner = net.inner_mut();
+                let panner_id = inner.push(Box::new(panner));
                 // Route: emitter → panner → master
-                net.connect_ports(emitter_node, 0, panner_id, 0);
-                net.pipe_output(panner_id);
+                inner.connect(emitter_node, 0, panner_id, 0);
+                inner.pipe_output(panner_id);
                 Some(panner_id)
             });
             spatial.panner_node_id = panner_id;
@@ -246,7 +249,7 @@ pub fn spatial_audio_sync_system(
 #[cfg(feature = "soundfont")]
 pub fn soundfont_playback_system(
     mut commands: Commands,
-    sf_assets: Res<Assets<crate::soundfont_assets::SoundFontSource>>,
+    sf_assets: Res<Assets<tutti::SoundFontAsset>>,
     engine: Option<Res<TuttiEngineResource>>,
     query: Query<(Entity, &crate::components::PlaySoundFont), Added<crate::components::PlaySoundFont>>,
 ) {
@@ -260,7 +263,7 @@ pub fn soundfont_playback_system(
         let settings = tutti::SynthesizerSettings::new(engine.sample_rate() as i32);
         let midi_registry = engine.graph_mut(|net| net.midi_registry().clone());
         let mut unit = match tutti::SoundFontUnit::with_midi(
-            source.soundfont().clone(),
+            source.0.clone(),
             &settings,
             midi_registry,
         ) {
@@ -273,7 +276,12 @@ pub fn soundfont_playback_system(
         };
         unit.program_change(play.channel, play.preset);
 
-        let node_id = engine.graph_mut(|net| net.add(unit).master());
+        let node_id = engine.graph_mut(|net| {
+            let inner = net.inner_mut();
+            let id = inner.push(Box::new(unit));
+            inner.pipe_output(id);
+            id
+        });
 
         commands.entity(entity)
             .remove::<crate::components::PlaySoundFont>()
@@ -287,7 +295,7 @@ pub fn soundfont_playback_system(
 #[cfg(all(feature = "neural", feature = "midi"))]
 pub fn neural_synth_playback_system(
     mut commands: Commands,
-    model_assets: Res<Assets<crate::neural_assets::NeuralModelSource>>,
+    model_assets: Res<Assets<tutti::NeuralModel>>,
     engine: Option<Res<TuttiEngineResource>>,
     query: Query<(Entity, &crate::components::PlayNeuralSynth), Added<crate::components::PlayNeuralSynth>>,
 ) {
@@ -321,7 +329,7 @@ pub fn neural_synth_playback_system(
 #[cfg(feature = "neural")]
 pub fn neural_effect_playback_system(
     mut commands: Commands,
-    model_assets: Res<Assets<crate::neural_assets::NeuralModelSource>>,
+    model_assets: Res<Assets<tutti::NeuralModel>>,
     engine: Option<Res<TuttiEngineResource>>,
     query: Query<(Entity, &crate::components::PlayNeuralEffect), Added<crate::components::PlayNeuralEffect>>,
 ) {
@@ -353,7 +361,7 @@ pub fn neural_effect_playback_system(
 #[cfg(feature = "neural")]
 fn load_neural_model(
     engine: &crate::TuttiEngineResource,
-    source: &crate::neural_assets::NeuralModelSource,
+    source: &tutti::NeuralModel,
 ) -> Result<(Box<dyn tutti::AudioUnit>, tutti::NeuralModelId), tutti::Error> {
     #[cfg(feature = "ort")]
     if source.path.extension().and_then(|e| e.to_str()) == Some("onnx") {

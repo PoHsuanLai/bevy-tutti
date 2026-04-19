@@ -32,7 +32,7 @@
 //! }
 //! ```
 
-mod assets;
+mod loader;
 #[cfg(feature = "analysis")]
 mod analysis;
 #[cfg(feature = "sampler")]
@@ -49,10 +49,8 @@ mod export_systems;
 mod metering;
 #[cfg(feature = "midi")]
 mod midi;
-#[cfg(feature = "soundfont")]
-mod soundfont_assets;
 #[cfg(feature = "neural")]
-mod neural_assets;
+mod neural_status;
 #[cfg(feature = "plugin")]
 pub mod native_window;
 mod systems;
@@ -65,7 +63,14 @@ use bevy_log::{error, info};
 
 use std::sync::Arc;
 
-pub use assets::{TuttiAudioLoader, TuttiAudioSource};
+pub use loader::{TuttiLoader, TuttiLoaderError, TuttiStreamingLoader, TuttiStreamingLoaderError};
+pub use tutti::WaveAsset;
+#[cfg(feature = "soundfont")]
+pub use tutti::SoundFontAsset;
+#[cfg(feature = "sampler")]
+pub use tutti::StreamingSample;
+#[cfg(feature = "neural")]
+pub use tutti::NeuralModel;
 
 pub use components::{AudioEmitter, AudioPlaybackState, AudioVolume, DespawnOnFinish, PlayAudio};
 #[cfg(feature = "spatial")]
@@ -101,14 +106,12 @@ pub use midi::systems::MpeExpressionResource;
 pub use tutti::{MpeHandle, MpeMode, MpeZone, MpeZoneConfig};
 
 #[cfg(feature = "soundfont")]
-pub use soundfont_assets::{Sf2LoadError, Sf2Loader, SoundFontSource};
-#[cfg(feature = "soundfont")]
 pub use components::PlaySoundFont;
 #[cfg(feature = "soundfont")]
 pub use systems::soundfont_playback_system;
 
 #[cfg(feature = "neural")]
-pub use neural_assets::{NeuralModelLoadError, NeuralModelLoader, NeuralModelSource, NeuralStatusResource, neural_status_sync_system};
+pub use neural_status::{neural_status_sync_system, NeuralStatusResource};
 #[cfg(all(feature = "neural", feature = "midi"))]
 pub use components::PlayNeuralSynth;
 #[cfg(all(feature = "neural", feature = "midi"))]
@@ -146,10 +149,9 @@ pub use systems::{
 };
 #[cfg(feature = "plugin")]
 pub use tutti::{
-    default_database_path, register_all_system_plugins, register_plugin,
-    register_plugin_directory, register_scanned_plugins, scan_system_plugins_async, ParameterFlags,
-    ParameterInfo, PluginDatabase, PluginHandle, PluginMetadata, PluginRecord, PluginScanner,
-    ScanHandle, ScanPhase, ScanProgress, ScanResult, TuttiPluginFormat,
+    register_plugin, register_plugin_directory, JsonCatalog, ParameterFlags, ParameterInfo,
+    PluginCatalog, PluginHandle, PluginRecord, PluginScanner, Plugins, PluginsConfig, ScanHandle,
+    ScanPhase, ScanProgress, ScanResult, TuttiPluginFormat,
 };
 
 #[cfg(feature = "neural")]
@@ -322,7 +324,7 @@ impl Plugin for TuttiPlugin {
                     engine.sample_rate(),
                     self.outputs
                 );
-                engine.metering().amp().cpu();
+                engine.metering().with_amp().with_cpu();
                 app.insert_resource(TuttiEngineResource(Arc::new(engine)));
             }
             Err(e) => {
@@ -359,8 +361,14 @@ impl Plugin for TuttiPlugin {
         app.init_resource::<audio_input::AudioInputState>();
 
         if self.enable_ecs {
-            app.init_asset::<TuttiAudioSource>()
-                .register_asset_loader(TuttiAudioLoader);
+            app.init_asset::<WaveAsset>()
+                .register_asset_loader(TuttiLoader::<WaveAsset>::default());
+
+            #[cfg(feature = "sampler")]
+            {
+                app.init_asset::<StreamingSample>()
+                    .register_asset_loader(TuttiStreamingLoader::<StreamingSample>::default());
+            }
 
             #[cfg(feature = "sampler")]
             app.add_systems(
@@ -383,22 +391,22 @@ impl Plugin for TuttiPlugin {
 
             #[cfg(feature = "soundfont")]
             {
-                app.init_asset::<SoundFontSource>()
-                    .register_asset_loader(Sf2Loader);
+                app.init_asset::<SoundFontAsset>()
+                    .register_asset_loader(TuttiLoader::<SoundFontAsset>::default());
                 app.add_systems(Update, systems::soundfont_playback_system);
             }
 
             #[cfg(feature = "neural")]
             {
-                app.init_asset::<NeuralModelSource>()
-                    .register_asset_loader(NeuralModelLoader);
+                app.init_asset::<NeuralModel>()
+                    .register_asset_loader(TuttiStreamingLoader::<NeuralModel>::default());
                 app.init_resource::<NeuralStatusResource>();
 
                 #[cfg(feature = "midi")]
                 app.add_systems(Update, systems::neural_synth_playback_system);
 
                 app.add_systems(Update, systems::neural_effect_playback_system);
-                app.add_systems(Update, neural_assets::neural_status_sync_system);
+                app.add_systems(Update, neural_status::neural_status_sync_system);
             }
 
             #[cfg(feature = "midi")]
