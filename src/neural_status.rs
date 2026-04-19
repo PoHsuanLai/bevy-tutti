@@ -8,32 +8,35 @@ pub struct NeuralStatusResource {
     pub is_enabled: bool,
     pub has_gpu: bool,
     pub is_healthy: bool,
-    pub utilization: f32,
     pub inference_avg_us: f32,
     pub inference_peak_us: f32,
-    pub queue_depth: u32,
     pub model_count: u32,
-    pub overload_count: u64,
 }
 
 pub fn neural_status_sync_system(
     engine: Option<Res<crate::TuttiEngineResource>>,
     mut status: ResMut<NeuralStatusResource>,
 ) {
-    let Some(engine) = engine else { return };
-    let handle = engine.neural_status();
-    if !handle.is_enabled() {
-        status.is_enabled = false;
+    let Some(engine) = engine else {
         return;
+    };
+    #[cfg(feature = "neural")]
+    {
+        let neural = engine.neural_engine();
+        let metrics = neural.meter().snapshot();
+        status.is_enabled = true;
+        // has_gpu is a property of the Backend, which lives on the engine
+        // thread. Track through a dedicated command if needed; for now the
+        // status panel doesn't surface this.
+        status.has_gpu = false;
+        status.is_healthy = neural.is_healthy();
+        status.inference_avg_us = metrics.inference.average.as_micros() as f32;
+        status.inference_peak_us = metrics.inference.peak.as_micros() as f32;
+        status.model_count = metrics.batch.model_count;
     }
-    status.is_enabled = true;
-    status.has_gpu = handle.has_gpu();
-    status.is_healthy = handle.is_healthy();
-    let metrics = handle.gpu_metrics();
-    status.utilization = metrics.utilization;
-    status.inference_avg_us = metrics.inference_average_us;
-    status.inference_peak_us = metrics.inference_peak_us;
-    status.queue_depth = metrics.queue_depth;
-    status.model_count = metrics.model_count;
-    status.overload_count = metrics.overload_count;
+    #[cfg(not(feature = "neural"))]
+    {
+        let _ = engine;
+        status.is_enabled = false;
+    }
 }
