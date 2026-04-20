@@ -17,9 +17,9 @@ pub fn dsp_compressor_system(
     let mut edited = false;
     for (entity, add) in query.iter() {
         let comp = if add.stereo {
-            tutti::dsp_nodes::Compressor::stereo(add.threshold_db, add.ratio, add.attack, add.release)
+            tutti::units::Compressor::stereo(add.threshold_db, add.ratio, add.attack, add.release)
         } else {
-            tutti::dsp_nodes::Compressor::mono(add.threshold_db, add.ratio, add.attack, add.release)
+            tutti::units::Compressor::mono(add.threshold_db, add.ratio, add.attack, add.release)
         }
         .with_makeup(add.makeup_db);
         let node_id = graph.0.add(Box::new(comp));
@@ -52,9 +52,9 @@ pub fn dsp_gate_system(
     let mut edited = false;
     for (entity, add) in query.iter() {
         let gate = if add.stereo {
-            tutti::dsp_nodes::Gate::stereo(add.threshold_db, add.attack, add.hold, add.release)
+            tutti::units::Gate::stereo(add.threshold_db, add.attack, add.hold, add.release)
         } else {
-            tutti::dsp_nodes::Gate::mono(add.threshold_db, add.attack, add.hold, add.release)
+            tutti::units::Gate::mono(add.threshold_db, add.attack, add.hold, add.release)
         };
         let node_id = graph.0.add(Box::new(gate));
         edited = true;
@@ -90,7 +90,7 @@ pub fn dsp_lfo_system(
                 bevy_log::warn!("Beat-synced LFO requested but no TransportRes available");
                 continue;
             };
-            let lfo = tutti::dsp_nodes::LfoNode::with_transport(
+            let lfo = tutti::units::LfoNode::with_transport(
                 add.shape,
                 add.frequency,
                 transport.0.clone(),
@@ -98,7 +98,7 @@ pub fn dsp_lfo_system(
             lfo.set_depth(add.depth);
             graph.0.add(Box::new(lfo))
         } else {
-            let lfo = tutti::dsp_nodes::LfoNode::new(add.shape, add.frequency);
+            let lfo = tutti::units::LfoNode::new(add.shape, add.frequency);
             lfo.set_depth(add.depth);
             graph.0.add(Box::new(lfo))
         };

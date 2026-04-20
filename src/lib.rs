@@ -215,13 +215,13 @@ pub use tutti::sampler::stretch::Unit as TimeStretchUnit;
 
 pub use components::AddLfo;
 pub use dsp_systems::dsp_lfo_system;
-pub use tutti::dsp_nodes::{LfoMode, LfoNode, LfoShape};
+pub use tutti::units::{LfoMode, LfoNode, LfoShape};
 #[cfg(feature = "dsp")]
 pub use components::{AddCompressor, AddGate};
 #[cfg(feature = "dsp")]
 pub use dsp_systems::{dsp_compressor_system, dsp_gate_system};
 #[cfg(feature = "dsp")]
-pub use tutti::dsp_nodes::{Compressor, Gate};
+pub use tutti::units::{Compressor, Gate};
 
 // =========================================================================
 // Resource wrappers around the flat TuttiEngine bundle.

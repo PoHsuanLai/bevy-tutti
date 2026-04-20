@@ -197,7 +197,7 @@ pub fn spatial_audio_sync_system(
     for (emitter_tf, emitter, mut spatial) in emitter_query.iter_mut() {
         if spatial.panner_node_id.is_none() {
             let emitter_node = emitter.node_id;
-            let Ok(panner) = tutti::dsp_nodes::SpatialPannerNode::stereo() else {
+            let Ok(panner) = tutti::units::SpatialPannerNode::stereo() else {
                 warn!("Failed to create SpatialPannerNode");
                 continue;
             };
@@ -236,7 +236,7 @@ pub fn spatial_audio_sync_system(
 
         if let Some(panner) = graph
             .0
-            .node::<tutti::dsp_nodes::SpatialPannerNode>(panner_id)
+            .node::<tutti::units::SpatialPannerNode>(panner_id)
         {
             panner.set_position(azimuth, elevation);
         }

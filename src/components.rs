@@ -667,7 +667,7 @@ impl AddGate {
 /// If `beat_synced` is true, the LFO is wired to the engine's transport.
 #[derive(Component)]
 pub struct AddLfo {
-    pub shape: tutti::dsp_nodes::LfoShape,
+    pub shape: tutti::units::LfoShape,
     pub frequency: f32,
     pub depth: f32,
     pub beat_synced: bool,
@@ -676,7 +676,7 @@ pub struct AddLfo {
 impl Default for AddLfo {
     fn default() -> Self {
         Self {
-            shape: tutti::dsp_nodes::LfoShape::Sine,
+            shape: tutti::units::LfoShape::Sine,
             frequency: 1.0,
             depth: 1.0,
             beat_synced: false,
@@ -686,7 +686,7 @@ impl Default for AddLfo {
 
 impl AddLfo {
     /// Free-running LFO with the given shape and frequency in Hz.
-    pub fn new(shape: tutti::dsp_nodes::LfoShape, frequency: f32) -> Self {
+    pub fn new(shape: tutti::units::LfoShape, frequency: f32) -> Self {
         Self {
             shape,
             frequency,
@@ -695,7 +695,7 @@ impl AddLfo {
     }
 
     /// Beat-synced LFO with the given shape and beats per cycle.
-    pub fn beat_synced(shape: tutti::dsp_nodes::LfoShape, beats_per_cycle: f32) -> Self {
+    pub fn beat_synced(shape: tutti::units::LfoShape, beats_per_cycle: f32) -> Self {
         Self {
             shape,
             frequency: beats_per_cycle,
