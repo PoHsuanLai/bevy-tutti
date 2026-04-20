@@ -1,6 +1,6 @@
 use bevy_ecs::prelude::*;
 
-use crate::TuttiEngineResource;
+use crate::TransportRes;
 
 /// Transport state synced from Tutti every frame via lock-free atomics.
 #[derive(Resource, Debug, Clone)]
@@ -57,17 +57,16 @@ impl TransportState {
 }
 
 pub fn transport_sync_system(
-    engine: Option<Res<TuttiEngineResource>>,
+    transport: Option<Res<TransportRes>>,
     mut state: ResMut<TransportState>,
 ) {
-    let Some(engine) = engine else { return };
-    let t = engine.transport();
-    state.beat = t.current_beat();
-    state.is_playing = t.is_playing();
-    state.is_recording = t.is_recording();
-    state.tempo = t.get_tempo() as f64;
-    state.is_looping = t.is_loop_enabled();
-    if let Some((start, end)) = t.get_loop_range() {
+    let Some(transport) = transport else { return };
+    state.beat = transport.current_beat();
+    state.is_playing = transport.is_playing();
+    state.is_recording = transport.is_recording();
+    state.tempo = transport.get_tempo() as f64;
+    state.is_looping = transport.is_loop_enabled();
+    if let Some((start, end)) = transport.get_loop_range() {
         state.loop_start = start;
         state.loop_end = end;
     }

@@ -6,7 +6,7 @@
 use std::marker::PhantomData;
 
 use bevy_asset::{Asset, AssetLoader, LoadContext, io::Reader, io::file::FileAssetReader};
-use tutti::{TuttiAsset, TuttiStreamingAsset};
+use tutti_asset::{TuttiAsset, TuttiStreamingAsset};
 
 /// Generic `AssetLoader` for any [`TuttiAsset`] that is also a Bevy [`Asset`].
 /// Reads the entire payload into memory then delegates to

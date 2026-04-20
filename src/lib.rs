@@ -25,10 +25,15 @@
 //!
 //! # Direct API Access
 //!
+//! Each subsystem of the `TuttiEngine` is surfaced as its own Bevy resource.
+//! Systems take only the ones they need:
+//!
 //! ```rust,ignore
-//! fn control_audio(engine: Res<TuttiEngineResource>) {
-//!     engine.transport().tempo(128.0).play();
-//!     engine.graph_mut(|net| net.add(sine_hz::<f32>(440.0)).master());
+//! fn control_audio(transport: Res<TransportRes>, mut graph: ResMut<TuttiGraphRes>) {
+//!     transport.tempo(128.0).play();
+//!     let id = graph.0.add_unit(tutti::dsp::sine_hz(440.0));
+//!     graph.0.pipe_output(id);
+//!     graph.0.commit();
 //! }
 //! ```
 
@@ -61,16 +66,17 @@ use bevy_asset::AssetApp;
 use bevy_ecs::prelude::*;
 use bevy_log::{error, info};
 
+#[cfg(any(feature = "sampler", feature = "soundfont", feature = "neural"))]
 use std::sync::Arc;
 
 pub use loader::{TuttiLoader, TuttiLoaderError, TuttiStreamingLoader, TuttiStreamingLoaderError};
-pub use tutti::WaveAsset;
+pub use tutti::core::WaveAsset;
 #[cfg(feature = "soundfont")]
-pub use tutti::SoundFontAsset;
+pub use tutti::synth::SoundFontAsset;
 #[cfg(feature = "sampler")]
-pub use tutti::StreamingSample;
+pub use tutti::sampler::StreamingSample;
 #[cfg(feature = "neural")]
-pub use tutti::NeuralModel;
+pub use tutti::neural::NeuralModel;
 
 pub use components::{AudioEmitter, AudioPlaybackState, AudioVolume, DespawnOnFinish, PlayAudio};
 #[cfg(feature = "spatial")]
@@ -101,9 +107,7 @@ pub use midi::systems::{midi_device_connect_system, midi_device_poll_system};
 #[cfg(feature = "mpe")]
 pub use midi::components::MpeReceiver;
 #[cfg(feature = "mpe")]
-pub use midi::systems::MpeExpressionResource;
-#[cfg(feature = "mpe")]
-pub use tutti::{MpeHandle, MpeMode, MpeZone, MpeZoneConfig};
+pub use tutti::midi::{MpeMode, MpeZone, MpeZoneConfig};
 
 #[cfg(feature = "soundfont")]
 pub use components::PlaySoundFont;
@@ -129,14 +133,14 @@ pub use device_state::{device_state_sync_system, AudioDeviceState};
 #[cfg(feature = "sampler")]
 pub use content_bounds::{content_bounds_sync_system, ContentBounds};
 
-pub use tutti::{NodeId, TuttiEngine, TuttiEngineBuilder, Wave};
+pub use tutti::{NodeId, TuttiDriver, TuttiEngine, TuttiEngineBuilder, TuttiGraph, Wave};
 
 #[cfg(feature = "midi")]
-pub use tutti::{
-    Channel, MidiEvent, MidiHandle, Note,
-};
+pub use tutti::midi::{MidiEvent, Note};
+#[cfg(feature = "midi")]
+pub use tutti::midi_runtime::MidiBus;
 #[cfg(feature = "midi-hardware")]
-pub use tutti::{MidiInputDevice, MidiOutputDevice};
+pub use tutti::midi::MidiIo;
 
 #[cfg(feature = "plugin")]
 pub use components::{
@@ -148,21 +152,26 @@ pub use systems::{
     plugin_editor_idle_system, plugin_editor_open_system,
 };
 #[cfg(feature = "plugin")]
-pub use tutti::{
-    register_plugin, register_plugin_directory, JsonCatalog, ParameterFlags, ParameterInfo,
-    PluginCatalog, PluginHandle, PluginRecord, PluginScanner, Plugins, PluginsConfig, ScanHandle,
-    ScanPhase, ScanProgress, ScanResult, TuttiPluginFormat,
+pub use tutti::plugin::catalog::{
+    PluginCatalog, PluginRecord, PluginScanner, Plugins, PluginsConfig, ScanHandle, ScanPhase,
+    ScanProgress, ScanResult,
 };
+#[cfg(feature = "plugin")]
+pub use tutti::plugin::catalog::JsonCatalog;
+#[cfg(feature = "plugin")]
+pub use tutti::plugin::handles::PluginHandle;
+#[cfg(feature = "plugin")]
+pub use tutti::plugin::metadata::{ParameterFlags, ParameterInfo};
 
 #[cfg(feature = "neural")]
-pub use tutti::NeuralEngine;
+pub use tutti::neural::Engine as NeuralEngine;
 
 #[cfg(feature = "sampler")]
 pub use components::{RecordingActive, StartRecording, StopRecording};
 #[cfg(feature = "sampler")]
 pub use systems::{recording_start_system, recording_stop_system, RecordingResult};
 #[cfg(feature = "sampler")]
-pub use tutti::{RecordedData, RecordingMode, RecordingSource};
+pub use tutti::sampler::capture::{Mode as RecordingMode, Recorded as RecordedData, Source as RecordingSource};
 
 #[cfg(feature = "analysis")]
 pub use analysis::{
@@ -178,7 +187,7 @@ pub use export_systems::{
     export_poll_system, export_start_system, ExportComplete, ExportFailed, ExportInProgress,
 };
 #[cfg(feature = "export")]
-pub use tutti::{AudioFormat, ExportHandle, ExportState, Normalize, Written};
+pub use tutti::export::{AudioFormat, Handle as ExportHandle, Normalize, State as ExportState, Written};
 
 #[cfg(feature = "sampler")]
 pub use audio_input::{
@@ -192,7 +201,7 @@ pub use components::{AddAutomationLane, AutomationLaneEmitter};
 #[cfg(feature = "automation")]
 pub use automation_systems::automation_lane_system;
 #[cfg(feature = "automation")]
-pub use tutti::{
+pub use tutti::automation::{
     AutomationClip, AutomationEnvelope, AutomationLane, AutomationPoint, AutomationState,
     CurveType, LiveAutomationLane,
 };
@@ -206,17 +215,127 @@ pub use tutti::sampler::stretch::Unit as TimeStretchUnit;
 
 pub use components::AddLfo;
 pub use dsp_systems::dsp_lfo_system;
-pub use tutti::{LfoMode, LfoNode, LfoShape};
+pub use tutti::dsp_nodes::{LfoMode, LfoNode, LfoShape};
 #[cfg(feature = "dsp")]
 pub use components::{AddCompressor, AddGate};
 #[cfg(feature = "dsp")]
 pub use dsp_systems::{dsp_compressor_system, dsp_gate_system};
 #[cfg(feature = "dsp")]
-pub use tutti::{Compressor, Gate};
+pub use tutti::dsp_nodes::{Compressor, Gate};
 
-/// Arc wrapper for `TuttiEngine`, exposed as a Bevy resource.
+// =========================================================================
+// Resource wrappers around the flat TuttiEngine bundle.
+// =========================================================================
+
+/// Audio device configuration captured at engine build time.
+#[derive(Resource, Clone, Copy, Debug)]
+pub struct AudioConfig {
+    pub sample_rate: f64,
+    pub channels: usize,
+}
+
+/// Owns the editable DSP graph. `&mut` edits; call `commit()` once per frame
+/// after a batch of edits to publish them to the audio thread.
+#[derive(Resource)]
+pub struct TuttiGraphRes(pub TuttiGraph);
+
+/// Owns the CPAL stream lifecycle (device selection, restart, enumeration).
+///
+/// The inner `TuttiDriver` holds a `cpal::Stream` which is `Send` but not
+/// `Sync` (CPAL streams are not reentrant). Wrapping in a `Mutex` gives us a
+/// `Resource`-compatible (`Send + Sync`) handle; in practice driver
+/// operations (`set_device` / `restart`) are infrequent and exclusive.
+#[derive(Resource)]
+pub struct TuttiDriverRes(pub std::sync::Mutex<TuttiDriver>);
+
+impl TuttiDriverRes {
+    pub fn new(driver: TuttiDriver) -> Self {
+        Self(std::sync::Mutex::new(driver))
+    }
+}
+
+/// Lock-free transport handle (play/stop/seek/tempo/loop).
 #[derive(Resource, Clone)]
-pub struct TuttiEngineResource(pub Arc<TuttiEngine>);
+pub struct TransportRes(pub tutti::TransportHandle);
+
+impl std::ops::Deref for TransportRes {
+    type Target = tutti::TransportHandle;
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+/// Lock-free metering handle (peak/RMS/LUFS/CPU snapshots).
+///
+/// `MeteringHandle` is not `Clone` upstream, so this resource is not `Clone`
+/// either. Systems read via `Res<MeteringRes>` and deref.
+#[derive(Resource)]
+pub struct MeteringRes(pub tutti::MeteringHandle);
+
+impl std::ops::Deref for MeteringRes {
+    type Target = tutti::MeteringHandle;
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+/// MIDI fan-out bus — audio-thread event dispatch to per-unit inboxes.
+#[cfg(feature = "midi")]
+#[derive(Resource, Clone)]
+pub struct MidiBusRes(pub MidiBus);
+
+#[cfg(feature = "midi")]
+impl std::ops::Deref for MidiBusRes {
+    type Target = MidiBus;
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+/// Hardware MIDI I/O (OS port management + virtual ports). Only present
+/// when `.midi()` was called on the builder.
+#[cfg(feature = "midi-hardware")]
+#[derive(Resource, Clone)]
+pub struct MidiIoRes(pub MidiIo);
+
+#[cfg(feature = "midi-hardware")]
+impl std::ops::Deref for MidiIoRes {
+    type Target = MidiIo;
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+/// Sampler subsystem (disk streaming, clip playback, capture).
+#[cfg(feature = "sampler")]
+#[derive(Resource, Clone)]
+pub struct SamplerRes(pub Arc<tutti::sampler::Sampler>);
+
+/// SoundFont system (file cache + synth instantiation).
+#[cfg(feature = "soundfont")]
+#[derive(Resource, Clone)]
+pub struct SoundFontRes(pub Arc<tutti::synth::SoundFontSystem>);
+
+/// Analysis handle (transient / pitch / stereo analysis).
+///
+/// `AnalysisHandle` is not `Clone` upstream.
+#[cfg(feature = "analysis")]
+#[derive(Resource)]
+pub struct AnalysisRes(pub tutti::analysis::AnalysisHandle);
+
+#[cfg(feature = "analysis")]
+impl std::ops::Deref for AnalysisRes {
+    type Target = tutti::analysis::AnalysisHandle;
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+/// Neural inference engine. Only inserted when a neural backend factory was
+/// supplied to the builder; absent otherwise.
+#[cfg(feature = "neural")]
+#[derive(Resource, Clone)]
+pub struct NeuralRes(pub Arc<NeuralEngine>);
 
 /// Non-Send marker resource that forces plugin editor systems to run on the
 /// main thread. AppKit (macOS), Win32, and X11 window operations must happen
@@ -226,14 +345,6 @@ pub struct TuttiEngineResource(pub Arc<TuttiEngine>);
 #[cfg(feature = "plugin")]
 pub struct PluginEditorMainThread;
 
-impl std::ops::Deref for TuttiEngineResource {
-    type Target = TuttiEngine;
-
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
-
 /// Bevy plugin that creates a `TuttiEngine`, starts the audio stream,
 /// and registers ECS components, asset loaders, and systems.
 pub struct TuttiPlugin {
@@ -242,10 +353,10 @@ pub struct TuttiPlugin {
     pub inputs: usize,
     pub outputs: usize,
     pub enable_midi: bool,
-    /// Set to `false` to only expose `TuttiEngineResource` without ECS systems.
+    /// Set to `false` to only expose the engine resources without ECS systems.
     pub enable_ecs: bool,
     #[cfg(feature = "mpe")]
-    pub mpe_mode: Option<tutti::MpeMode>,
+    pub mpe_mode: Option<tutti::midi::MpeMode>,
 }
 
 impl Default for TuttiPlugin {
@@ -283,7 +394,7 @@ impl TuttiPlugin {
 
     /// Automatically enables MIDI.
     #[cfg(feature = "mpe")]
-    pub fn with_mpe(mut self, mode: tutti::MpeMode) -> Self {
+    pub fn with_mpe(mut self, mode: tutti::midi::MpeMode) -> Self {
         self.mpe_mode = Some(mode);
         self.enable_midi = true;
         self
@@ -321,11 +432,72 @@ impl Plugin for TuttiPlugin {
             Ok(engine) => {
                 info!(
                     "Tutti Audio Engine started ({}Hz, {}ch)",
-                    engine.sample_rate(),
-                    self.outputs
+                    engine.sample_rate, self.outputs
                 );
-                engine.metering().with_amp().with_cpu();
-                app.insert_resource(TuttiEngineResource(Arc::new(engine)));
+
+                // Enable amplitude + CPU metering by default (used by the
+                // metering_sync_system).
+                engine.metering.inner().enable_amp();
+                engine.metering.inner().cpu().enable();
+
+                let sample_rate = engine.sample_rate;
+                let channels = engine.channels;
+
+                app.insert_resource(AudioConfig {
+                    sample_rate,
+                    channels,
+                });
+
+                // Destructure the flat bundle into per-subsystem resources.
+                let TuttiEngine {
+                    graph,
+                    driver,
+                    transport,
+                    metering,
+                    #[cfg(feature = "midi")]
+                    midi,
+                    #[cfg(feature = "midi")]
+                    midi_io,
+                    #[cfg(feature = "sampler")]
+                    sampler,
+                    #[cfg(feature = "soundfont")]
+                    soundfont,
+                    #[cfg(feature = "analysis")]
+                    analysis,
+                    #[cfg(feature = "neural")]
+                    neural,
+                    ..
+                } = engine;
+
+                app.insert_resource(TuttiGraphRes(graph));
+                app.insert_resource(TuttiDriverRes::new(driver));
+                app.insert_resource(TransportRes(transport));
+                app.insert_resource(MeteringRes(metering));
+
+                #[cfg(feature = "midi")]
+                app.insert_resource(MidiBusRes(midi));
+                #[cfg(feature = "midi-hardware")]
+                if let Some(io) = midi_io {
+                    app.insert_resource(MidiIoRes(io));
+                }
+                #[cfg(all(feature = "midi", not(feature = "midi-hardware")))]
+                {
+                    let _ = midi_io;
+                }
+
+                #[cfg(feature = "sampler")]
+                app.insert_resource(SamplerRes(sampler));
+
+                #[cfg(feature = "soundfont")]
+                app.insert_resource(SoundFontRes(soundfont));
+
+                #[cfg(feature = "analysis")]
+                app.insert_resource(AnalysisRes(analysis));
+
+                #[cfg(feature = "neural")]
+                if let Some(n) = neural {
+                    app.insert_resource(NeuralRes(n));
+                }
             }
             Err(e) => {
                 error!("Failed to start Tutti Audio Engine: {}", e);
@@ -436,6 +608,14 @@ impl Plugin for TuttiPlugin {
                 );
             }
 
+            #[cfg(feature = "mpe")]
+            {
+                app.add_systems(
+                    bevy_app::Startup,
+                    midi::systems::mpe_setup_system,
+                );
+            }
+
             #[cfg(feature = "midi-hardware")]
             {
                 app.add_message::<midi::events::MidiDeviceEvent>();
@@ -450,14 +630,6 @@ impl Plugin for TuttiPlugin {
                 );
             }
 
-            #[cfg(feature = "mpe")]
-            {
-                app.add_systems(
-                    bevy_app::Startup,
-                    midi::systems::mpe_setup_system,
-                );
-            }
-
             #[cfg(feature = "plugin")]
             {
                 if !app.is_plugin_added::<bevy_tokio_tasks::TokioTasksPlugin>() {
@@ -465,11 +637,6 @@ impl Plugin for TuttiPlugin {
                 }
 
                 app.insert_non_send_resource(PluginEditorMainThread);
-
-                app.add_systems(
-                    bevy_app::Startup,
-                    inject_tokio_handle_system,
-                );
 
                 app.add_systems(
                     Update,
@@ -559,17 +726,4 @@ impl Plugin for TuttiPlugin {
             }
         }
     }
-}
-
-/// Startup system that grabs the tokio runtime handle from `TokioTasksRuntime`
-/// and stores it on the `TuttiEngine` for use in async plugin operations.
-#[cfg(feature = "plugin")]
-fn inject_tokio_handle_system(
-    engine: Option<Res<TuttiEngineResource>>,
-    runtime: Res<bevy_tokio_tasks::TokioTasksRuntime>,
-) {
-    let Some(engine) = engine else { return };
-    let handle = runtime.runtime().handle().clone();
-    engine.set_tokio_handle(handle);
-    info!("Injected tokio runtime handle into TuttiEngine");
 }

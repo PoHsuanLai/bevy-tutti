@@ -1,6 +1,6 @@
 use bevy_ecs::prelude::*;
 
-use crate::TuttiEngineResource;
+use crate::{AudioConfig, TuttiDriverRes};
 
 /// Audio device state synced from Tutti every frame.
 #[derive(Resource, Debug, Clone)]
@@ -23,26 +23,32 @@ impl Default for AudioDeviceState {
 }
 
 pub fn device_state_sync_system(
-    engine: Option<Res<TuttiEngineResource>>,
+    driver: Option<Res<TuttiDriverRes>>,
+    config: Option<Res<AudioConfig>>,
     mut state: ResMut<AudioDeviceState>,
 ) {
-    let Some(engine) = engine else { return };
-
-    state.is_running = engine.is_running();
-    state.channels = engine.channels();
+    let Some(driver) = driver else { return };
+    if let Ok(d) = driver.0.lock() {
+        state.is_running = d.is_running();
+    }
+    if let Some(cfg) = config {
+        state.channels = cfg.channels;
+    }
 }
 
 /// One-shot startup system: enumerate devices once.
 pub fn device_state_init_system(
-    engine: Option<Res<TuttiEngineResource>>,
+    driver: Option<Res<TuttiDriverRes>>,
     mut state: ResMut<AudioDeviceState>,
 ) {
-    let Some(engine) = engine else { return };
+    let Some(driver) = driver else { return };
 
-    if let Ok(name) = engine.device_name() {
-        state.current_device = name;
+    if let Ok(d) = driver.0.lock() {
+        if let Ok(name) = d.device_name() {
+            state.current_device = name;
+        }
     }
-    if let Ok(devices) = tutti::TuttiEngine::devices() {
+    if let Ok(devices) = tutti::TuttiDriver::devices() {
         state.output_devices = devices.map(|(_, name)| name).collect();
     }
 }

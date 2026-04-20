@@ -14,29 +14,21 @@ pub struct NeuralStatusResource {
 }
 
 pub fn neural_status_sync_system(
-    engine: Option<Res<crate::TuttiEngineResource>>,
+    neural: Option<Res<crate::NeuralRes>>,
     mut status: ResMut<NeuralStatusResource>,
 ) {
-    let Some(engine) = engine else {
+    let Some(neural) = neural else {
+        status.is_enabled = false;
         return;
     };
-    #[cfg(feature = "neural")]
-    {
-        let neural = engine.neural_engine();
-        let metrics = neural.meter().snapshot();
-        status.is_enabled = true;
-        // has_gpu is a property of the Backend, which lives on the engine
-        // thread. Track through a dedicated command if needed; for now the
-        // status panel doesn't surface this.
-        status.has_gpu = false;
-        status.is_healthy = neural.is_healthy();
-        status.inference_avg_us = metrics.inference.average.as_micros() as f32;
-        status.inference_peak_us = metrics.inference.peak.as_micros() as f32;
-        status.model_count = metrics.batch.model_count;
-    }
-    #[cfg(not(feature = "neural"))]
-    {
-        let _ = engine;
-        status.is_enabled = false;
-    }
+    let metrics = neural.0.meter().snapshot();
+    status.is_enabled = true;
+    // has_gpu is a property of the Backend, which lives on the engine
+    // thread. Track through a dedicated command if needed; for now the
+    // status panel doesn't surface this.
+    status.has_gpu = false;
+    status.is_healthy = neural.0.is_healthy();
+    status.inference_avg_us = metrics.inference.average.as_micros() as f32;
+    status.inference_peak_us = metrics.inference.peak.as_micros() as f32;
+    status.model_count = metrics.batch.model_count;
 }

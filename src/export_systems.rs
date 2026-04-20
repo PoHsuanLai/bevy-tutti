@@ -1,10 +1,10 @@
 use bevy_ecs::prelude::*;
 
-use crate::TuttiEngineResource;
+use crate::{AudioConfig, TuttiGraphRes};
 
 #[derive(Component)]
 pub struct ExportInProgress {
-    pub(crate) handle: tutti::ExportHandle<tutti::Written>,
+    pub(crate) handle: tutti::export::Handle<tutti::export::Written>,
 }
 
 #[derive(Component)]
@@ -17,13 +17,16 @@ pub struct ExportFailed {
 
 pub fn export_start_system(
     mut commands: Commands,
-    engine: Option<Res<TuttiEngineResource>>,
+    graph: Option<Res<TuttiGraphRes>>,
+    config: Option<Res<AudioConfig>>,
     query: Query<(Entity, &crate::components::StartExport), Added<crate::components::StartExport>>,
 ) {
-    let Some(engine) = engine else { return };
+    let Some(graph) = graph else { return };
+    let Some(config) = config else { return };
 
     for (entity, start) in query.iter() {
-        let mut builder = engine.export();
+        let net = graph.0.clone_net();
+        let mut builder = tutti::export::Export::graph(net, config.sample_rate);
 
         if let Some(seconds) = start.duration_seconds {
             builder = builder.duration_seconds(seconds);
@@ -55,14 +58,14 @@ pub fn export_poll_system(
 ) {
     for (entity, mut export) in query.iter_mut() {
         match export.handle.poll() {
-            tutti::ExportState::Done(_written) => {
+            tutti::export::State::Done(_written) => {
                 bevy_log::info!("Export complete (entity {entity:?})");
                 commands
                     .entity(entity)
                     .remove::<ExportInProgress>()
                     .insert(ExportComplete);
             }
-            tutti::ExportState::Failed(error) => {
+            tutti::export::State::Failed(error) => {
                 bevy_log::error!("Export failed (entity {entity:?}): {error}");
                 commands
                     .entity(entity)
@@ -71,7 +74,7 @@ pub fn export_poll_system(
                         error: error.to_string(),
                     });
             }
-            tutti::ExportState::Running { .. } | tutti::ExportState::Pending => {}
+            tutti::export::State::Running { .. } | tutti::export::State::Pending => {}
         }
     }
 }

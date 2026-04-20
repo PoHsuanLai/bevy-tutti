@@ -4,7 +4,7 @@ use bevy_ecs::prelude::*;
 use bevy_ecs::message::Message;
 
 #[cfg(feature = "midi")]
-use tutti::MidiEvent;
+use tutti::midi::MidiEvent;
 
 /// Fired every frame for each MIDI event received from hardware input.
 #[cfg(feature = "midi")]
@@ -28,14 +28,11 @@ impl MidiInputEvent {
         self.0.note()
     }
 
+    /// Velocity as a 7-bit MIDI 1 value, downconverted from the internal
+    /// 16-bit MIDI 2 form if the event is MIDI 2.
     #[inline]
     pub fn velocity(&self) -> Option<u8> {
-        self.0.velocity()
-    }
-
-    #[inline]
-    pub fn channel(&self) -> u8 {
-        self.0.channel_num()
+        self.0.velocity_u7()
     }
 
     #[inline]

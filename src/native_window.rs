@@ -13,7 +13,7 @@ pub fn native_view_ptr(raw: raw_window_handle::RawWindowHandle) -> Option<u64> {
     match raw {
         RawWindowHandle::AppKit(h) => Some(h.ns_view.as_ptr() as u64),
         RawWindowHandle::Win32(h) => Some(isize::from(h.hwnd) as u64),
-        RawWindowHandle::Xlib(h) => Some(h.window as u64),
+        RawWindowHandle::Xlib(h) => Some(h.window),
         RawWindowHandle::Xcb(h) => Some(h.window.get() as u64),
         RawWindowHandle::Wayland(h) => Some(h.surface.as_ptr() as u64),
         _ => None,

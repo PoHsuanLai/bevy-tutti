@@ -2,27 +2,27 @@ use std::sync::Arc;
 
 use bevy_ecs::prelude::*;
 
-use crate::TuttiEngineResource;
+use crate::AnalysisRes;
 
 /// Live analysis state synced from Tutti via lock-free ArcSwap reads.
 ///
 /// Fields are `Arc` pointers -- cheap to clone for UI consumption.
 #[derive(Resource)]
 pub struct LiveAnalysisData {
-    pub pitch: Arc<tutti::PitchResult>,
-    pub transients: Arc<Vec<tutti::Transient>>,
-    pub waveform: Arc<tutti::WaveformSummary>,
-    pub spectrum: Arc<tutti::SpectrumResult>,
+    pub pitch: Arc<tutti::analysis::PitchResult>,
+    pub transients: Arc<Vec<tutti::analysis::Transient>>,
+    pub waveform: Arc<tutti::analysis::WaveformSummary>,
+    pub spectrum: Arc<tutti::analysis::SpectrumResult>,
     pub is_live: bool,
 }
 
 impl Default for LiveAnalysisData {
     fn default() -> Self {
         Self {
-            pitch: Arc::new(tutti::PitchResult::default()),
+            pitch: Arc::new(tutti::analysis::PitchResult::default()),
             transients: Arc::new(Vec::new()),
-            waveform: Arc::new(tutti::WaveformSummary::default()),
-            spectrum: Arc::new(tutti::SpectrumResult::default()),
+            waveform: Arc::new(tutti::analysis::WaveformSummary::new(512)),
+            spectrum: Arc::new(tutti::analysis::SpectrumResult::default()),
             is_live: false,
         }
     }
@@ -30,16 +30,27 @@ impl Default for LiveAnalysisData {
 
 pub fn live_analysis_control_system(
     mut commands: Commands,
-    engine: Option<Res<TuttiEngineResource>>,
-    mut analysis: ResMut<LiveAnalysisData>,
+    analysis: Option<Res<AnalysisRes>>,
+    mut data: ResMut<LiveAnalysisData>,
     enable_query: Query<Entity, Added<crate::components::EnableLiveAnalysis>>,
     disable_query: Query<Entity, Added<crate::components::DisableLiveAnalysis>>,
 ) {
-    let Some(engine) = engine else { return };
+    // The new flat-bundle AnalysisHandle does not yet expose a runtime
+    // enable/disable toggle (it's a constructor-time choice via `with_live`).
+    // Mirror the enable/disable requests onto the `is_live` flag so downstream
+    // code can at least gate polling; log a warning so callers know the
+    // underlying analysis thread is not actually being spawned/stopped.
+    let Some(analysis) = analysis else { return };
 
     for entity in enable_query.iter() {
-        engine.enable_live_analysis();
-        analysis.is_live = true;
+        if !analysis.is_live() {
+            bevy_log::warn!(
+                "EnableLiveAnalysis received but AnalysisHandle has no runtime \
+                 enable hook in this version of tutti — is_live flag flipped \
+                 but no live analysis thread will be spawned"
+            );
+        }
+        data.is_live = true;
         commands
             .entity(entity)
             .remove::<crate::components::EnableLiveAnalysis>();
@@ -47,8 +58,7 @@ pub fn live_analysis_control_system(
     }
 
     for entity in disable_query.iter() {
-        engine.disable_live_analysis();
-        analysis.is_live = false;
+        data.is_live = false;
         commands
             .entity(entity)
             .remove::<crate::components::DisableLiveAnalysis>();
@@ -57,17 +67,16 @@ pub fn live_analysis_control_system(
 }
 
 pub fn live_analysis_sync_system(
-    engine: Option<Res<TuttiEngineResource>>,
-    mut analysis: ResMut<LiveAnalysisData>,
+    analysis: Option<Res<AnalysisRes>>,
+    mut data: ResMut<LiveAnalysisData>,
 ) {
-    if !analysis.is_live {
+    if !data.is_live {
         return;
     }
-    let Some(engine) = engine else { return };
+    let Some(analysis) = analysis else { return };
 
-    let handle = engine.analysis();
-    analysis.pitch = handle.live_pitch();
-    analysis.transients = handle.live_transients();
-    analysis.waveform = handle.live_waveform();
-    analysis.spectrum = handle.live_spectrum();
+    data.pitch = analysis.live_pitch();
+    data.transients = analysis.live_transients();
+    data.waveform = analysis.live_waveform();
+    data.spectrum = analysis.live_spectrum();
 }

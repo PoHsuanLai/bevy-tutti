@@ -6,14 +6,12 @@ use bevy_ecs::prelude::*;
 use bevy_log::warn;
 
 #[cfg(feature = "sampler")]
-use tutti::WaveAsset;
+use tutti::core::WaveAsset;
 #[cfg(any(feature = "sampler", feature = "soundfont", feature = "neural", feature = "plugin"))]
 use crate::components::*;
-#[cfg(any(feature = "sampler", feature = "soundfont", feature = "neural", feature = "plugin"))]
-use crate::TuttiEngineResource;
 
 #[cfg(feature = "sampler")]
-use tutti::SamplerUnit;
+use tutti::sampler::SamplerUnit;
 #[cfg(feature = "sampler")]
 use crate::components::{TimeStretch, TimeStretchControl};
 
@@ -27,11 +25,15 @@ use crate::components::{TimeStretch, TimeStretchControl};
 pub fn audio_playback_system(
     mut commands: Commands,
     audio_assets: Res<Assets<WaveAsset>>,
-    engine: Option<Res<TuttiEngineResource>>,
+    graph: Option<ResMut<crate::TuttiGraphRes>>,
+    config: Option<Res<crate::AudioConfig>>,
     query: Query<(Entity, &PlayAudio), Added<PlayAudio>>,
     ts_query: Query<&TimeStretch>,
 ) {
-    let Some(engine) = engine else { return };
+    let Some(mut graph) = graph else { return };
+    let Some(config) = config else { return };
+
+    let mut edited = false;
 
     for (entity, play) in query.iter() {
         let Some(source) = audio_assets.get(&play.source) else {
@@ -45,29 +47,28 @@ pub fn audio_playback_system(
         let looping = play.looping;
 
         let ts = ts_query.get(entity).ok();
-        let sample_rate = engine.sample_rate();
+        let sample_rate = config.sample_rate;
 
-        let (node_id, ts_control) = engine.graph_mut(|net| {
-            let sampler = SamplerUnit::with_settings(wave, gain, speed, looping);
+        let sampler = SamplerUnit::with_settings(wave, gain, speed, looping);
 
-            if let Some(ts) = ts {
-                let wrapped =
-                    tutti::sampler::stretch::Unit::new(Box::new(sampler), sample_rate);
-                wrapped.set_stretch_factor(ts.stretch_factor);
-                wrapped.set_pitch_cents(ts.pitch_cents);
-                let control = TimeStretchControl {
-                    stretch_factor: wrapped.stretch_factor_arc(),
-                    pitch_cents: wrapped.pitch_cents_arc(),
-                };
-                let id = net.inner_mut().push(Box::new(wrapped));
-                net.inner_mut().pipe_output(id);
-                (id, Some(control))
-            } else {
-                let id = net.inner_mut().push(Box::new(sampler));
-                net.inner_mut().pipe_output(id);
-                (id, None)
-            }
-        });
+        let (node_id, ts_control) = if let Some(ts) = ts {
+            let wrapped =
+                tutti::sampler::stretch::Unit::new(Box::new(sampler), sample_rate);
+            wrapped.set_stretch_factor(ts.stretch_factor);
+            wrapped.set_pitch_cents(ts.pitch_cents);
+            let control = TimeStretchControl {
+                stretch_factor: wrapped.stretch_factor_arc(),
+                pitch_cents: wrapped.pitch_cents_arc(),
+            };
+            let id = graph.0.add(Box::new(wrapped));
+            graph.0.pipe_output(id);
+            (id, Some(control))
+        } else {
+            let id = graph.0.add(Box::new(sampler));
+            graph.0.pipe_output(id);
+            (id, None)
+        };
+        edited = true;
 
         let mut entity_commands = commands.entity(entity);
         entity_commands
@@ -82,24 +83,30 @@ pub fn audio_playback_system(
             entity_commands.insert(DespawnOnFinish);
         }
     }
+
+    if edited {
+        graph.0.commit();
+    }
 }
 
 /// Syncs `AudioVolume` component changes to the tutti graph node's gain.
 #[cfg(feature = "sampler")]
 pub fn audio_parameter_sync_system(
-    engine: Option<Res<TuttiEngineResource>>,
+    graph: Option<ResMut<crate::TuttiGraphRes>>,
     query: Query<(&AudioEmitter, &AudioVolume), Changed<AudioVolume>>,
 ) {
-    let Some(engine) = engine else { return };
+    let Some(mut graph) = graph else { return };
 
+    let mut edited = false;
     for (emitter, volume) in query.iter() {
-        let node_id = emitter.node_id;
-        let gain = volume.0;
-        engine.graph_mut(|net| {
-            if let Some(sampler) = net.node_mut_typed::<SamplerUnit>(node_id) {
-                sampler.set_gain(gain);
-            }
-        });
+        if let Some(sampler) = graph.0.node_mut::<SamplerUnit>(emitter.node_id) {
+            sampler.set_gain(volume.0);
+            edited = true;
+        }
+    }
+
+    if edited {
+        graph.0.commit();
     }
 }
 
@@ -108,7 +115,7 @@ pub fn audio_parameter_sync_system(
 #[cfg(feature = "sampler")]
 pub fn audio_cleanup_system(
     mut commands: Commands,
-    engine: Option<Res<TuttiEngineResource>>,
+    graph: Option<ResMut<crate::TuttiGraphRes>>,
     mut query: Query<(
         Entity,
         &AudioEmitter,
@@ -116,32 +123,37 @@ pub fn audio_cleanup_system(
         Option<&DespawnOnFinish>,
     )>,
 ) {
-    let Some(engine) = engine else { return };
+    let Some(mut graph) = graph else { return };
+
+    let mut edited = false;
 
     for (entity, emitter, mut state, despawn) in query.iter_mut() {
         if *state != AudioPlaybackState::Playing {
             continue;
         }
 
-        let is_playing = engine.graph(|net| {
-            net.node_ref_typed::<SamplerUnit>(emitter.node_id)
-                .map(|s| s.is_playing())
-                .unwrap_or(false)
-        });
+        let is_playing = graph
+            .0
+            .node::<SamplerUnit>(emitter.node_id)
+            .map(|s| s.is_playing())
+            .unwrap_or(false);
 
         if !is_playing {
             *state = AudioPlaybackState::Finished;
 
-            engine.graph_mut(|net| {
-                if net.contains(emitter.node_id) {
-                    net.remove(emitter.node_id);
-                }
-            });
+            if graph.0.contains(emitter.node_id) {
+                graph.0.remove(emitter.node_id);
+                edited = true;
+            }
 
             if despawn.is_some() {
                 commands.entity(entity).despawn();
             }
         }
+    }
+
+    if edited {
+        graph.0.commit();
     }
 }
 
@@ -154,8 +166,12 @@ pub fn time_stretch_sync_system(
     query: Query<(&TimeStretch, &TimeStretchControl), Changed<TimeStretch>>,
 ) {
     for (ts, control) in query.iter() {
-        control.stretch_factor.store(ts.stretch_factor, tutti::Ordering::Release);
-        control.pitch_cents.store(ts.pitch_cents, tutti::Ordering::Release);
+        control
+            .stretch_factor
+            .store(ts.stretch_factor, tutti::core::Ordering::Release);
+        control
+            .pitch_cents
+            .store(ts.pitch_cents, tutti::core::Ordering::Release);
     }
 }
 
@@ -165,7 +181,7 @@ pub fn time_stretch_sync_system(
 /// Computes listener-relative azimuth/elevation and applies distance attenuation.
 #[cfg(all(feature = "spatial", feature = "sampler"))]
 pub fn spatial_audio_sync_system(
-    engine: Option<Res<TuttiEngineResource>>,
+    graph: Option<ResMut<crate::TuttiGraphRes>>,
     listener_query: Query<&bevy_transform::components::GlobalTransform, With<AudioListener>>,
     mut emitter_query: Query<(
         &bevy_transform::components::GlobalTransform,
@@ -173,28 +189,24 @@ pub fn spatial_audio_sync_system(
         &mut SpatialAudio,
     )>,
 ) {
-    let Some(engine) = engine else { return };
+    let Some(mut graph) = graph else { return };
     let listener_tf = listener_query.single().ok();
+
+    let mut edited = false;
 
     for (emitter_tf, emitter, mut spatial) in emitter_query.iter_mut() {
         if spatial.panner_node_id.is_none() {
             let emitter_node = emitter.node_id;
-            let panner_id = engine.graph_mut(|net| {
-                let Ok(panner) = tutti::SpatialPannerNode::stereo() else {
-                    warn!("Failed to create SpatialPannerNode");
-                    return None;
-                };
-                let inner = net.inner_mut();
-                let panner_id = inner.push(Box::new(panner));
-                // Route: emitter → panner → master
-                inner.connect(emitter_node, 0, panner_id, 0);
-                inner.pipe_output(panner_id);
-                Some(panner_id)
-            });
-            spatial.panner_node_id = panner_id;
-            if panner_id.is_none() {
+            let Ok(panner) = tutti::dsp_nodes::SpatialPannerNode::stereo() else {
+                warn!("Failed to create SpatialPannerNode");
                 continue;
-            }
+            };
+            let panner_id = graph.0.add(Box::new(panner));
+            // Route: emitter → panner → master
+            graph.0.connect(emitter_node, 0, panner_id, 0);
+            graph.0.pipe_output(panner_id);
+            edited = true;
+            spatial.panner_node_id = Some(panner_id);
         }
 
         let Some(panner_id) = spatial.panner_node_id else {
@@ -222,13 +234,12 @@ pub fn spatial_audio_sync_system(
             (az, el, pos.length())
         };
 
-        engine.graph(|net| {
-            if let Some(panner) =
-                net.node_ref_typed::<tutti::SpatialPannerNode>(panner_id)
-            {
-                panner.set_position(azimuth, elevation);
-            }
-        });
+        if let Some(panner) = graph
+            .0
+            .node::<tutti::dsp_nodes::SpatialPannerNode>(panner_id)
+        {
+            panner.set_position(azimuth, elevation);
+        }
 
         let gain = compute_attenuation(
             distance,
@@ -236,11 +247,13 @@ pub fn spatial_audio_sync_system(
             spatial.ref_distance,
             spatial.max_distance,
         );
-        engine.graph_mut(|net| {
-            if let Some(sampler) = net.node_mut_typed::<SamplerUnit>(emitter.node_id) {
-                sampler.set_gain(gain);
-            }
-        });
+        if let Some(sampler) = graph.0.node_mut::<SamplerUnit>(emitter.node_id) {
+            sampler.set_gain(gain);
+        }
+    }
+
+    if edited {
+        graph.0.commit();
     }
 }
 
@@ -249,43 +262,54 @@ pub fn spatial_audio_sync_system(
 #[cfg(feature = "soundfont")]
 pub fn soundfont_playback_system(
     mut commands: Commands,
-    sf_assets: Res<Assets<tutti::SoundFontAsset>>,
-    engine: Option<Res<TuttiEngineResource>>,
+    sf_assets: Res<Assets<tutti::synth::SoundFontAsset>>,
+    graph: Option<ResMut<crate::TuttiGraphRes>>,
+    config: Option<Res<crate::AudioConfig>>,
+    #[cfg(feature = "midi")] midi: Option<Res<crate::MidiBusRes>>,
     query: Query<(Entity, &crate::components::PlaySoundFont), Added<crate::components::PlaySoundFont>>,
 ) {
-    let Some(engine) = engine else { return };
+    let Some(mut graph) = graph else { return };
+    let Some(config) = config else { return };
+
+    let mut edited = false;
 
     for (entity, play) in query.iter() {
         let Some(source) = sf_assets.get(&play.source) else {
             continue;
         };
 
-        let settings = tutti::SynthesizerSettings::new(engine.sample_rate() as i32);
-        let midi_registry = engine.graph_mut(|net| net.midi_registry().clone());
-        let mut unit = match tutti::SoundFontUnit::with_midi(
-            source.0.clone(),
-            &settings,
-            midi_registry,
-        ) {
+        let settings = tutti::synth::SynthesizerSettings::new(config.sample_rate as i32);
+        let mut unit = match tutti::synth::SoundFontUnit::new(source.0.clone(), &settings) {
             Ok(unit) => unit,
             Err(e) => {
                 bevy_log::error!("Failed to create SoundFontUnit: {}", e);
-                commands.entity(entity).remove::<crate::components::PlaySoundFont>();
+                commands
+                    .entity(entity)
+                    .remove::<crate::components::PlaySoundFont>();
                 continue;
             }
         };
         unit.program_change(play.channel, play.preset);
 
-        let node_id = engine.graph_mut(|net| {
-            let inner = net.inner_mut();
-            let id = inner.push(Box::new(unit));
-            inner.pipe_output(id);
-            id
-        });
+        // Register the unit's MIDI sender with the bus so the routing table
+        // can dispatch events to it by MidiUnitId.
+        #[cfg(feature = "midi")]
+        if let Some(midi) = &midi {
+            midi.0.insert(unit.midi_sender());
+        }
 
-        commands.entity(entity)
+        let id = graph.0.add(Box::new(unit));
+        graph.0.pipe_output(id);
+        edited = true;
+
+        commands
+            .entity(entity)
             .remove::<crate::components::PlaySoundFont>()
-            .insert(AudioEmitter { node_id });
+            .insert(AudioEmitter { node_id: id });
+    }
+
+    if edited {
+        graph.0.commit();
     }
 }
 
@@ -295,32 +319,45 @@ pub fn soundfont_playback_system(
 #[cfg(all(feature = "neural", feature = "midi"))]
 pub fn neural_synth_playback_system(
     mut commands: Commands,
-    model_assets: Res<Assets<tutti::NeuralModel>>,
-    engine: Option<Res<TuttiEngineResource>>,
+    model_assets: Res<Assets<tutti::neural::NeuralModel>>,
+    graph: Option<ResMut<crate::TuttiGraphRes>>,
+    neural: Option<Res<crate::NeuralRes>>,
     query: Query<(Entity, &crate::components::PlayNeuralSynth), Added<crate::components::PlayNeuralSynth>>,
 ) {
-    let Some(engine) = engine else { return };
+    let Some(mut graph) = graph else { return };
+    let Some(neural) = neural else { return };
+
+    let mut edited = false;
 
     for (entity, play) in query.iter() {
         let Some(source) = model_assets.get(&play.source) else {
             continue;
         };
 
-        let result = load_neural_model(&engine, source);
-        match result {
-            Ok((unit, model_id)) => {
-                let node_id = engine.graph_mut(|net| {
-                    net.add_neural_boxed(unit, model_id).master()
-                });
-                commands.entity(entity)
+        match load_neural_model(&neural.0, source) {
+            Ok(unit) => {
+                let id = graph.0.master(unit);
+                edited = true;
+                commands
+                    .entity(entity)
                     .remove::<crate::components::PlayNeuralSynth>()
-                    .insert(AudioEmitter { node_id });
+                    .insert(AudioEmitter { node_id: id });
             }
             Err(e) => {
-                bevy_log::error!("Failed to create neural synth '{}': {}", source.name, e);
-                commands.entity(entity).remove::<crate::components::PlayNeuralSynth>();
+                bevy_log::error!(
+                    "Failed to create neural synth '{}': {}",
+                    source.path.display(),
+                    e
+                );
+                commands
+                    .entity(entity)
+                    .remove::<crate::components::PlayNeuralSynth>();
             }
         }
+    }
+
+    if edited {
+        graph.0.commit();
     }
 }
 
@@ -329,57 +366,75 @@ pub fn neural_synth_playback_system(
 #[cfg(feature = "neural")]
 pub fn neural_effect_playback_system(
     mut commands: Commands,
-    model_assets: Res<Assets<tutti::NeuralModel>>,
-    engine: Option<Res<TuttiEngineResource>>,
+    model_assets: Res<Assets<tutti::neural::NeuralModel>>,
+    graph: Option<ResMut<crate::TuttiGraphRes>>,
+    neural: Option<Res<crate::NeuralRes>>,
     query: Query<(Entity, &crate::components::PlayNeuralEffect), Added<crate::components::PlayNeuralEffect>>,
 ) {
-    let Some(engine) = engine else { return };
+    let Some(mut graph) = graph else { return };
+    let Some(neural) = neural else { return };
+
+    let mut edited = false;
 
     for (entity, play) in query.iter() {
         let Some(source) = model_assets.get(&play.source) else {
             continue;
         };
 
-        let result = load_neural_model(&engine, source);
-        match result {
-            Ok((unit, model_id)) => {
-                let node_id = engine.graph_mut(|net| {
-                    net.add_neural_boxed(unit, model_id).master()
-                });
-                commands.entity(entity)
+        match load_neural_model(&neural.0, source) {
+            Ok(unit) => {
+                let id = graph.0.master(unit);
+                edited = true;
+                commands
+                    .entity(entity)
                     .remove::<crate::components::PlayNeuralEffect>()
-                    .insert(AudioEmitter { node_id });
+                    .insert(AudioEmitter { node_id: id });
             }
             Err(e) => {
-                bevy_log::error!("Failed to create neural effect '{}': {}", source.name, e);
-                commands.entity(entity).remove::<crate::components::PlayNeuralEffect>();
+                bevy_log::error!(
+                    "Failed to create neural effect '{}': {}",
+                    source.path.display(),
+                    e
+                );
+                commands
+                    .entity(entity)
+                    .remove::<crate::components::PlayNeuralEffect>();
             }
         }
+    }
+
+    if edited {
+        graph.0.commit();
     }
 }
 
 #[cfg(feature = "neural")]
 fn load_neural_model(
-    engine: &crate::TuttiEngineResource,
-    source: &tutti::NeuralModel,
-) -> Result<(Box<dyn tutti::AudioUnit>, tutti::ModelId), tutti::Error> {
+    engine: &std::sync::Arc<tutti::neural::Engine>,
+    source: &tutti::neural::NeuralModel,
+) -> Result<Box<dyn tutti::AudioUnit>, tutti::Error> {
     #[cfg(feature = "ort")]
     if source.path.extension().and_then(|e| e.to_str()) == Some("onnx") {
-        return engine.onnx(&source.path).build();
+        let (unit, _id) = tutti::onnx(engine, &source.path).build()?;
+        return Ok(unit);
     }
+
+    #[cfg(not(feature = "ort"))]
+    let _ = engine;
 
     Err(tutti::Error::Core(tutti::core::Error::InvalidConfig(
         format!("Unsupported neural model format: {}", source.path.display()),
     )))
 }
 
-#[cfg(feature = "spatial")]
+#[cfg(all(feature = "spatial", feature = "sampler"))]
 fn compute_attenuation(
     distance: f32,
-    model: AttenuationModel,
+    model: crate::components::AttenuationModel,
     ref_distance: f32,
     max_distance: f32,
 ) -> f32 {
+    use crate::components::AttenuationModel;
     if distance >= max_distance {
         return 0.0;
     }
@@ -423,7 +478,7 @@ pub fn plugin_editor_open_system(
 
         let window_entity = commands
             .spawn(Window {
-                title: format!("{}", emitter.handle.name()),
+                title: emitter.handle.name().to_string(),
                 resolution: WindowResolution::new(800, 600),
                 decorations: true,
                 visible: false,
@@ -456,55 +511,62 @@ pub fn plugin_editor_attach_system(
         let Ok(raw_handle) = handles.get(pend.window_entity) else {
             continue; // handle not ready yet
         };
-        let Some(view_ptr) = native_view_ptr(raw_handle.get_window_handle()) else {
-            continue;
-        };
+        // SAFETY: plugin editor systems are pinned to the main thread via
+        // `PluginEditorMainThread` non-send marker; `get_handle` is safe to
+        // call on the main thread.
+        let thread_locked = unsafe { raw_handle.get_handle() };
 
-        if let Some((w, h)) = emitter.handle.open_editor(view_ptr) {
-            bevy_log::info!(
-                "Plugin '{}' editor opened ({w}x{h})",
-                emitter.handle.name()
-            );
+        match emitter.handle.open_editor(&thread_locked) {
+            Ok(size) => {
+                let w = size.width;
+                let h = size.height;
+                bevy_log::info!(
+                    "Plugin '{}' editor opened ({w}x{h})",
+                    emitter.handle.name()
+                );
 
-            // Resize and show the window.
-            if let Ok(mut win) = windows.get_mut(pend.window_entity) {
-                win.resolution
-                    .set(w as f32, h as f32);
-                win.visible = true;
+                // Resize and show the window.
+                if let Ok(mut win) = windows.get_mut(pend.window_entity) {
+                    win.resolution.set(w as f32, h as f32);
+                    win.visible = true;
+                }
+
+                // Attach as child of primary window so they move together.
+                if let Ok(parent_handle) = primary.single() {
+                    attach_child_window(raw_handle, parent_handle);
+                }
+
+                // Remove RawHandleWrapper so Bevy's renderer doesn't create a
+                // wgpu surface on this window (the plugin owns the rendering).
+                commands
+                    .entity(pend.window_entity)
+                    .remove::<bevy_window::RawHandleWrapper>();
+
+                commands
+                    .entity(entity)
+                    .remove::<PendingPluginEditor>()
+                    .insert(PluginEditorOpen {
+                        editor_window: pend.window_entity,
+                        width: w,
+                        height: h,
+                    });
             }
-
-            // Attach as child of primary window so they move together.
-            if let Ok(parent_handle) = primary.single() {
-                attach_child_window(raw_handle, parent_handle);
+            Err(e) => {
+                warn!(
+                    "Plugin '{}' editor failed to open: {}",
+                    emitter.handle.name(),
+                    e,
+                );
+                commands.entity(pend.window_entity).despawn();
+                commands.entity(entity).remove::<PendingPluginEditor>();
             }
-
-            // Remove RawHandleWrapper so Bevy's renderer doesn't create a
-            // wgpu surface on this window (the plugin owns the rendering).
-            commands
-                .entity(pend.window_entity)
-                .remove::<bevy_window::RawHandleWrapper>();
-
-            commands.entity(entity).remove::<PendingPluginEditor>().insert(
-                PluginEditorOpen {
-                    editor_window: pend.window_entity,
-                    width: w,
-                    height: h,
-                },
-            );
-        } else {
-            warn!(
-                "Plugin '{}' editor failed to open",
-                emitter.handle.name()
-            );
-            commands.entity(pend.window_entity).despawn();
-            commands.entity(entity).remove::<PendingPluginEditor>();
         }
     }
 }
 
 // Platform helpers re-exported for use in this module.
 #[cfg(feature = "plugin")]
-use crate::native_window::{attach_child_window, native_view_ptr};
+use crate::native_window::attach_child_window;
 
 /// Closes plugin editors for entities with `ClosePluginEditor` trigger.
 #[cfg(feature = "plugin")]
@@ -534,10 +596,12 @@ pub fn plugin_editor_close_system(
 #[cfg(feature = "plugin")]
 pub fn plugin_crash_detect_system(
     mut commands: Commands,
-    engine: Option<Res<TuttiEngineResource>>,
+    graph: Option<ResMut<crate::TuttiGraphRes>>,
     query: Query<(Entity, &AudioEmitter, &PluginEmitter)>,
 ) {
-    let Some(engine) = engine else { return };
+    let Some(mut graph) = graph else { return };
+
+    let mut edited = false;
 
     for (entity, audio, plugin) in query.iter() {
         if plugin.handle.is_crashed() {
@@ -546,11 +610,10 @@ pub fn plugin_crash_detect_system(
                 plugin.handle.name()
             );
 
-            engine.graph_mut(|net| {
-                if net.contains(audio.node_id) {
-                    net.remove(audio.node_id);
-                }
-            });
+            if graph.0.contains(audio.node_id) {
+                graph.0.remove(audio.node_id);
+                edited = true;
+            }
 
             commands
                 .entity(entity)
@@ -559,26 +622,32 @@ pub fn plugin_crash_detect_system(
                 .remove::<AudioEmitter>();
         }
     }
+
+    if edited {
+        graph.0.commit();
+    }
 }
 
 /// Processes `StartRecording` trigger components.
 ///
-/// Calls `engine.sampler().start_recording()` with the current transport beat,
+/// Calls `sampler.recording().start_recording()` with the current transport beat,
 /// replaces the trigger with `RecordingActive`.
 #[cfg(feature = "sampler")]
 pub fn recording_start_system(
     mut commands: Commands,
-    engine: Option<Res<TuttiEngineResource>>,
+    sampler: Option<Res<crate::SamplerRes>>,
     transport: Res<crate::TransportState>,
     query: Query<(Entity, &StartRecording), Added<StartRecording>>,
 ) {
-    let Some(engine) = engine else { return };
+    let Some(sampler) = sampler else { return };
 
     for (entity, start) in query.iter() {
-        match engine
-            .sampler()
-            .start_recording(start.channel_index, start.source, start.mode, transport.beat)
-        {
+        match sampler.0.recording().start_recording(
+            start.channel_index,
+            start.source,
+            start.mode,
+            transport.beat,
+        ) {
             Ok(()) => {
                 commands
                     .entity(entity)
@@ -609,20 +678,20 @@ pub fn recording_start_system(
 
 /// Processes `StopRecording` trigger components.
 ///
-/// Calls `engine.sampler().stop_recording()`, removes `RecordingActive`,
+/// Calls `sampler.recording().stop_recording()`, removes `RecordingActive`,
 /// and logs the result. The `RecordedData` is available in the log;
 /// for programmatic access, use the direct sampler API.
 #[cfg(feature = "sampler")]
 pub fn recording_stop_system(
     mut commands: Commands,
-    engine: Option<Res<TuttiEngineResource>>,
+    sampler: Option<Res<crate::SamplerRes>>,
     query: Query<(Entity, &StopRecording), Added<StopRecording>>,
     active_query: Query<(Entity, &RecordingActive)>,
 ) {
-    let Some(engine) = engine else { return };
+    let Some(sampler) = sampler else { return };
 
     for (entity, stop) in query.iter() {
-        match engine.sampler().stop_recording(stop.channel_index) {
+        match sampler.0.recording().stop_recording(stop.channel_index) {
             Ok(data) => {
                 bevy_log::info!(
                     "Recording stopped on channel {}, data captured",

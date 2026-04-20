@@ -1,6 +1,6 @@
 use bevy_ecs::prelude::*;
 
-use crate::TuttiEngineResource;
+use crate::{TransportRes, TuttiGraphRes};
 
 /// Content duration bounds synced from Tutti every frame.
 #[derive(Resource, Debug, Clone, Copy, Default)]
@@ -11,11 +11,13 @@ pub struct ContentBounds {
 }
 
 pub fn content_bounds_sync_system(
-    engine: Option<Res<TuttiEngineResource>>,
+    graph: Option<Res<TuttiGraphRes>>,
+    transport: Option<Res<TransportRes>>,
     mut bounds: ResMut<ContentBounds>,
 ) {
-    let Some(engine) = engine else { return };
+    let Some(graph) = graph else { return };
+    let Some(transport) = transport else { return };
 
-    bounds.end_beat = engine.content_end_beat();
-    bounds.duration_seconds = engine.content_duration();
+    bounds.end_beat = graph.0.content_end_beat(&transport.0);
+    bounds.duration_seconds = graph.0.content_duration(&transport.0);
 }

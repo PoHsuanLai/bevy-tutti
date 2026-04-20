@@ -30,6 +30,7 @@ objc2-app-kit = { version = "0.3", optional = true, features = ["NSView", "NSWin
 # Tutti audio engine (bevy_asset feature required for Asset/TypePath derives on
 # Wave, SoundFont, StreamingSample, NeuralModel and the TuttiAsset traits).
 tutti = { path = "../tutti", features = ["bevy_asset"] }
+tutti-asset = { path = "../tutti/crates/tutti-asset", features = ["std"] }
 
 # Error handling
 thiserror = "2"

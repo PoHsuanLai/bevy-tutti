@@ -2,7 +2,7 @@ use bevy_asset::Handle;
 use bevy_ecs::prelude::*;
 use tutti::NodeId;
 
-use tutti::WaveAsset;
+use tutti::core::WaveAsset;
 
 /// Marks an entity as an audio emitter with a live node in tutti's graph.
 ///
@@ -33,6 +33,7 @@ pub struct AudioListener;
 #[cfg(feature = "spatial")]
 #[derive(Component)]
 pub struct SpatialAudio {
+    #[cfg_attr(not(feature = "sampler"), allow(dead_code))]
     pub(crate) panner_node_id: Option<NodeId>,
     pub attenuation: AttenuationModel,
     pub max_distance: f32,
@@ -180,14 +181,14 @@ pub struct DespawnOnFinish;
 #[cfg(feature = "soundfont")]
 #[derive(Component)]
 pub struct PlaySoundFont {
-    pub source: Handle<tutti::SoundFontAsset>,
+    pub source: Handle<tutti::synth::SoundFontAsset>,
     pub preset: i32,
     pub channel: i32,
 }
 
 #[cfg(feature = "soundfont")]
 impl PlaySoundFont {
-    pub fn new(source: Handle<tutti::SoundFontAsset>) -> Self {
+    pub fn new(source: Handle<tutti::synth::SoundFontAsset>) -> Self {
         Self { source, preset: 0, channel: 0 }
     }
 
@@ -217,12 +218,12 @@ impl PlaySoundFont {
 #[cfg(all(feature = "neural", feature = "midi"))]
 #[derive(Component)]
 pub struct PlayNeuralSynth {
-    pub source: Handle<tutti::NeuralModel>,
+    pub source: Handle<tutti::neural::NeuralModel>,
 }
 
 #[cfg(all(feature = "neural", feature = "midi"))]
 impl PlayNeuralSynth {
-    pub fn new(source: Handle<tutti::NeuralModel>) -> Self {
+    pub fn new(source: Handle<tutti::neural::NeuralModel>) -> Self {
         Self { source }
     }
 }
@@ -235,12 +236,12 @@ impl PlayNeuralSynth {
 #[cfg(feature = "neural")]
 #[derive(Component)]
 pub struct PlayNeuralEffect {
-    pub source: Handle<tutti::NeuralModel>,
+    pub source: Handle<tutti::neural::NeuralModel>,
 }
 
 #[cfg(feature = "neural")]
 impl PlayNeuralEffect {
-    pub fn new(source: Handle<tutti::NeuralModel>) -> Self {
+    pub fn new(source: Handle<tutti::neural::NeuralModel>) -> Self {
         Self { source }
     }
 }
@@ -254,7 +255,7 @@ impl PlayNeuralEffect {
 #[cfg(feature = "plugin")]
 #[derive(Component)]
 pub struct PluginEmitter {
-    pub handle: tutti::PluginHandle,
+    pub handle: tutti::plugin::handles::PluginHandle,
 }
 
 /// Present while a plugin's GUI editor is open in a separate Bevy window.
@@ -370,8 +371,8 @@ pub struct StartExport {
     pub path: std::path::PathBuf,
     pub duration_seconds: Option<f64>,
     pub duration_beats: Option<(f64, f64)>,
-    pub format: Option<tutti::AudioFormat>,
-    pub normalization: Option<tutti::Normalize>,
+    pub format: Option<tutti::export::AudioFormat>,
+    pub normalization: Option<tutti::export::Normalize>,
 }
 
 #[cfg(feature = "export")]
@@ -396,12 +397,12 @@ impl StartExport {
         self
     }
 
-    pub fn format(mut self, format: tutti::AudioFormat) -> Self {
+    pub fn format(mut self, format: tutti::export::AudioFormat) -> Self {
         self.format = Some(format);
         self
     }
 
-    pub fn normalization(mut self, mode: tutti::Normalize) -> Self {
+    pub fn normalization(mut self, mode: tutti::export::Normalize) -> Self {
         self.normalization = Some(mode);
         self
     }
@@ -479,18 +480,18 @@ pub struct DisableAudioInput;
 #[cfg(feature = "automation")]
 #[derive(Component)]
 pub struct AddAutomationLane {
-    pub envelope: tutti::AutomationEnvelope<String>,
+    pub envelope: tutti::automation::AutomationEnvelope<String>,
 }
 
 #[cfg(feature = "automation")]
 impl AddAutomationLane {
     pub fn new(target: impl Into<String>) -> Self {
         Self {
-            envelope: tutti::AutomationEnvelope::new(target.into()),
+            envelope: tutti::automation::AutomationEnvelope::new(target.into()),
         }
     }
 
-    pub fn with_envelope(envelope: tutti::AutomationEnvelope<String>) -> Self {
+    pub fn with_envelope(envelope: tutti::automation::AutomationEnvelope<String>) -> Self {
         Self { envelope }
     }
 }
@@ -536,8 +537,8 @@ pub struct TimeStretch {
 #[cfg(feature = "sampler")]
 #[derive(Component)]
 pub struct TimeStretchControl {
-    pub(crate) stretch_factor: std::sync::Arc<tutti::AtomicF32>,
-    pub(crate) pitch_cents: std::sync::Arc<tutti::AtomicF32>,
+    pub(crate) stretch_factor: std::sync::Arc<tutti::core::AtomicF32>,
+    pub(crate) pitch_cents: std::sync::Arc<tutti::core::AtomicF32>,
 }
 
 /// Trigger component: spawn an entity with this to add a compressor to the graph.
@@ -666,7 +667,7 @@ impl AddGate {
 /// If `beat_synced` is true, the LFO is wired to the engine's transport.
 #[derive(Component)]
 pub struct AddLfo {
-    pub shape: tutti::LfoShape,
+    pub shape: tutti::dsp_nodes::LfoShape,
     pub frequency: f32,
     pub depth: f32,
     pub beat_synced: bool,
@@ -675,7 +676,7 @@ pub struct AddLfo {
 impl Default for AddLfo {
     fn default() -> Self {
         Self {
-            shape: tutti::LfoShape::Sine,
+            shape: tutti::dsp_nodes::LfoShape::Sine,
             frequency: 1.0,
             depth: 1.0,
             beat_synced: false,
@@ -685,7 +686,7 @@ impl Default for AddLfo {
 
 impl AddLfo {
     /// Free-running LFO with the given shape and frequency in Hz.
-    pub fn new(shape: tutti::LfoShape, frequency: f32) -> Self {
+    pub fn new(shape: tutti::dsp_nodes::LfoShape, frequency: f32) -> Self {
         Self {
             shape,
             frequency,
@@ -694,7 +695,7 @@ impl AddLfo {
     }
 
     /// Beat-synced LFO with the given shape and beats per cycle.
-    pub fn beat_synced(shape: tutti::LfoShape, beats_per_cycle: f32) -> Self {
+    pub fn beat_synced(shape: tutti::dsp_nodes::LfoShape, beats_per_cycle: f32) -> Self {
         Self {
             shape,
             frequency: beats_per_cycle,

@@ -1,6 +1,6 @@
 use bevy_ecs::prelude::*;
 
-use crate::TuttiEngineResource;
+use crate::SamplerRes;
 
 /// Audio input state synced from Tutti's sampler subsystem every frame.
 #[derive(Resource)]
@@ -26,26 +26,29 @@ pub struct AudioInputDeviceInfo {
 
 pub fn audio_input_control_system(
     mut commands: Commands,
-    engine: Option<Res<TuttiEngineResource>>,
+    sampler: Option<Res<SamplerRes>>,
     enable_query: Query<
         (Entity, &crate::components::EnableAudioInput),
         Added<crate::components::EnableAudioInput>,
     >,
     disable_query: Query<Entity, Added<crate::components::DisableAudioInput>>,
 ) {
-    let Some(engine) = engine else { return };
+    let Some(sampler) = sampler else { return };
+    let input = sampler.0.audio_input();
 
     for (entity, enable) in enable_query.iter() {
-        let sampler = engine.sampler();
-
         if let Some(device_index) = enable.device_index {
-            if let Err(e) = sampler.select_input_device(device_index) {
-                bevy_log::error!("Failed to select audio input device {}: {}", device_index, e);
+            if let Err(e) = input.select_device(device_index) {
+                bevy_log::error!(
+                    "Failed to select audio input device {}: {}",
+                    device_index,
+                    e
+                );
             }
         }
 
-        sampler.set_input_gain(enable.gain);
-        sampler.set_input_monitoring(enable.monitoring);
+        input.set_gain(enable.gain);
+        input.set_monitoring(enable.monitoring);
 
         commands
             .entity(entity)
@@ -59,7 +62,7 @@ pub fn audio_input_control_system(
     }
 
     for entity in disable_query.iter() {
-        engine.sampler().set_input_monitoring(false);
+        input.set_monitoring(false);
 
         commands
             .entity(entity)
@@ -69,20 +72,20 @@ pub fn audio_input_control_system(
 }
 
 pub fn audio_input_sync_system(
-    engine: Option<Res<TuttiEngineResource>>,
+    sampler: Option<Res<SamplerRes>>,
     mut state: ResMut<AudioInputState>,
 ) {
-    let Some(engine) = engine else { return };
-    state.peak_level = engine.sampler().input_peak_level();
+    let Some(sampler) = sampler else { return };
+    state.peak_level = sampler.0.audio_input().peak_level();
 }
 
 /// One-shot startup: enumerate input devices once.
 pub fn audio_input_init_system(
-    engine: Option<Res<TuttiEngineResource>>,
+    sampler: Option<Res<SamplerRes>>,
     mut state: ResMut<AudioInputState>,
 ) {
-    let Some(engine) = engine else { return };
-    let devices = engine.sampler().list_input_devices();
+    let Some(sampler) = sampler else { return };
+    let devices = sampler.0.audio_input().list_input_devices();
     state.devices = devices
         .into_iter()
         .map(|d| AudioInputDeviceInfo {

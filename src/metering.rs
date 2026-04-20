@@ -1,6 +1,6 @@
 use bevy_ecs::prelude::*;
 
-use crate::TuttiEngineResource;
+use crate::MeteringRes;
 
 /// Master output peak/RMS levels, synced from Tutti every frame via lock-free atomics.
 #[derive(Resource, Debug, Clone, Copy, Default)]
@@ -12,11 +12,11 @@ pub struct MasterMeterLevels {
 }
 
 pub fn metering_sync_system(
-    engine: Option<Res<TuttiEngineResource>>,
+    metering: Option<Res<MeteringRes>>,
     mut levels: ResMut<MasterMeterLevels>,
 ) {
-    let Some(engine) = engine else { return };
-    let (l_peak, r_peak, l_rms, r_rms) = engine.metering().amplitude();
+    let Some(metering) = metering else { return };
+    let (l_peak, r_peak, l_rms, r_rms) = metering.amplitude();
     levels.peak_left = l_peak;
     levels.peak_right = r_peak;
     levels.rms_left = l_rms;

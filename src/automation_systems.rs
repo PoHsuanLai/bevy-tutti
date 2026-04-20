@@ -1,19 +1,26 @@
 use bevy_ecs::prelude::*;
 
 use crate::components::{AddAutomationLane, AutomationLaneEmitter};
-use crate::TuttiEngineResource;
+use crate::{TransportRes, TuttiGraphRes};
 
 pub fn automation_lane_system(
     mut commands: Commands,
-    engine: Option<Res<TuttiEngineResource>>,
+    graph: Option<ResMut<TuttiGraphRes>>,
+    transport: Option<Res<TransportRes>>,
     query: Query<(Entity, &AddAutomationLane), Added<AddAutomationLane>>,
 ) {
-    let Some(engine) = engine else { return };
+    let Some(mut graph) = graph else { return };
+    let Some(transport) = transport else { return };
+
+    let mut edited = false;
 
     for (entity, add) in query.iter() {
-        let lane = engine.automation_lane(add.envelope.clone());
-
-        let node_id = engine.graph_mut(|net| net.inner_mut().push(Box::new(lane)));
+        let lane = tutti::automation::AutomationLane::new(
+            add.envelope.clone(),
+            transport.0.clone(),
+        );
+        let node_id = graph.0.add(Box::new(lane));
+        edited = true;
 
         commands
             .entity(entity)
@@ -21,5 +28,9 @@ pub fn automation_lane_system(
             .insert(AutomationLaneEmitter { node_id });
 
         bevy_log::info!("Automation lane added (entity {entity:?}, node {node_id:?})");
+    }
+
+    if edited {
+        graph.0.commit();
     }
 }

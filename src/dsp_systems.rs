@@ -1,7 +1,7 @@
 use bevy_ecs::prelude::*;
 
 use crate::components::{AddLfo, AudioEmitter};
-use crate::TuttiEngineResource;
+use crate::{TransportRes, TuttiGraphRes};
 
 #[cfg(feature = "dsp")]
 use crate::components::{AddCompressor, AddGate};
@@ -9,21 +9,21 @@ use crate::components::{AddCompressor, AddGate};
 #[cfg(feature = "dsp")]
 pub fn dsp_compressor_system(
     mut commands: Commands,
-    engine: Option<Res<TuttiEngineResource>>,
+    graph: Option<ResMut<TuttiGraphRes>>,
     query: Query<(Entity, &AddCompressor), Added<AddCompressor>>,
 ) {
-    let Some(engine) = engine else { return };
+    let Some(mut graph) = graph else { return };
 
+    let mut edited = false;
     for (entity, add) in query.iter() {
-        let node_id = engine.graph_mut(|net| {
-            let comp = if add.stereo {
-                tutti::Compressor::stereo(add.threshold_db, add.ratio, add.attack, add.release)
-            } else {
-                tutti::Compressor::mono(add.threshold_db, add.ratio, add.attack, add.release)
-            }
-            .with_makeup(add.makeup_db);
-            net.inner_mut().push(Box::new(comp))
-        });
+        let comp = if add.stereo {
+            tutti::dsp_nodes::Compressor::stereo(add.threshold_db, add.ratio, add.attack, add.release)
+        } else {
+            tutti::dsp_nodes::Compressor::mono(add.threshold_db, add.ratio, add.attack, add.release)
+        }
+        .with_makeup(add.makeup_db);
+        let node_id = graph.0.add(Box::new(comp));
+        edited = true;
 
         commands
             .entity(entity)
@@ -35,25 +35,29 @@ pub fn dsp_compressor_system(
             add.stereo
         );
     }
+
+    if edited {
+        graph.0.commit();
+    }
 }
 
 #[cfg(feature = "dsp")]
 pub fn dsp_gate_system(
     mut commands: Commands,
-    engine: Option<Res<TuttiEngineResource>>,
+    graph: Option<ResMut<TuttiGraphRes>>,
     query: Query<(Entity, &AddGate), Added<AddGate>>,
 ) {
-    let Some(engine) = engine else { return };
+    let Some(mut graph) = graph else { return };
 
+    let mut edited = false;
     for (entity, add) in query.iter() {
-        let node_id = engine.graph_mut(|net| {
-            let gate = if add.stereo {
-                tutti::Gate::stereo(add.threshold_db, add.attack, add.hold, add.release)
-            } else {
-                tutti::Gate::mono(add.threshold_db, add.attack, add.hold, add.release)
-            };
-            net.inner_mut().push(Box::new(gate))
-        });
+        let gate = if add.stereo {
+            tutti::dsp_nodes::Gate::stereo(add.threshold_db, add.attack, add.hold, add.release)
+        } else {
+            tutti::dsp_nodes::Gate::mono(add.threshold_db, add.attack, add.hold, add.release)
+        };
+        let node_id = graph.0.add(Box::new(gate));
+        edited = true;
 
         commands
             .entity(entity)
@@ -65,26 +69,40 @@ pub fn dsp_gate_system(
             add.stereo
         );
     }
+
+    if edited {
+        graph.0.commit();
+    }
 }
 
 pub fn dsp_lfo_system(
     mut commands: Commands,
-    engine: Option<Res<TuttiEngineResource>>,
+    graph: Option<ResMut<TuttiGraphRes>>,
+    transport: Option<Res<TransportRes>>,
     query: Query<(Entity, &AddLfo), Added<AddLfo>>,
 ) {
-    let Some(engine) = engine else { return };
+    let Some(mut graph) = graph else { return };
 
+    let mut edited = false;
     for (entity, add) in query.iter() {
         let node_id = if add.beat_synced {
-            let transport = engine.transport();
-            let lfo = tutti::LfoNode::with_transport(add.shape, add.frequency, transport);
+            let Some(transport) = transport.as_ref() else {
+                bevy_log::warn!("Beat-synced LFO requested but no TransportRes available");
+                continue;
+            };
+            let lfo = tutti::dsp_nodes::LfoNode::with_transport(
+                add.shape,
+                add.frequency,
+                transport.0.clone(),
+            );
             lfo.set_depth(add.depth);
-            engine.graph_mut(|net| net.inner_mut().push(Box::new(lfo)))
+            graph.0.add(Box::new(lfo))
         } else {
-            let lfo = tutti::LfoNode::new(add.shape, add.frequency);
+            let lfo = tutti::dsp_nodes::LfoNode::new(add.shape, add.frequency);
             lfo.set_depth(add.depth);
-            engine.graph_mut(|net| net.inner_mut().push(Box::new(lfo)))
+            graph.0.add(Box::new(lfo))
         };
+        edited = true;
 
         commands
             .entity(entity)
@@ -95,5 +113,9 @@ pub fn dsp_lfo_system(
             "LFO added (entity {entity:?}, beat_synced={}, node {node_id:?})",
             add.beat_synced
         );
+    }
+
+    if edited {
+        graph.0.commit();
     }
 }
