@@ -155,7 +155,7 @@ pub use tutti::{
 };
 
 #[cfg(feature = "neural")]
-pub use tutti::{NeuralHandle, NeuralSystem, NeuralSystemBuilder};
+pub use tutti::NeuralEngine;
 
 #[cfg(feature = "sampler")]
 pub use components::{RecordingActive, StartRecording, StopRecording};

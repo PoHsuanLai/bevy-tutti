@@ -362,7 +362,7 @@ pub fn neural_effect_playback_system(
 fn load_neural_model(
     engine: &crate::TuttiEngineResource,
     source: &tutti::NeuralModel,
-) -> Result<(Box<dyn tutti::AudioUnit>, tutti::NeuralModelId), tutti::Error> {
+) -> Result<(Box<dyn tutti::AudioUnit>, tutti::ModelId), tutti::Error> {
     #[cfg(feature = "ort")]
     if source.path.extension().and_then(|e| e.to_str()) == Some("onnx") {
         return engine.onnx(&source.path).build();
