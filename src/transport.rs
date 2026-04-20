@@ -64,7 +64,7 @@ pub fn transport_sync_system(
     state.beat = transport.current_beat();
     state.is_playing = transport.is_playing();
     state.is_recording = transport.is_recording();
-    state.tempo = transport.get_tempo() as f64;
+    state.tempo = transport.get_tempo().get();
     state.is_looping = transport.is_loop_enabled();
     if let Some((start, end)) = transport.get_loop_range() {
         state.loop_start = start;
