@@ -60,11 +60,11 @@ pub fn audio_playback_system(
                 stretch_factor: wrapped.stretch_factor_arc(),
                 pitch_cents: wrapped.pitch_cents_arc(),
             };
-            let id = graph.0.add(Box::new(wrapped));
+            let id = graph.0.add(wrapped);
             graph.0.pipe_output(id);
             (id, Some(control))
         } else {
-            let id = graph.0.add(Box::new(sampler));
+            let id = graph.0.add(sampler);
             graph.0.pipe_output(id);
             (id, None)
         };
@@ -201,7 +201,7 @@ pub fn spatial_audio_sync_system(
                 warn!("Failed to create SpatialPannerNode");
                 continue;
             };
-            let panner_id = graph.0.add(Box::new(panner));
+            let panner_id = graph.0.add(panner);
             // Route: emitter → panner → master
             graph.0.connect(emitter_node, 0, panner_id, 0);
             graph.0.pipe_output(panner_id);
@@ -298,7 +298,7 @@ pub fn soundfont_playback_system(
             midi.0.insert(unit.midi_sender());
         }
 
-        let id = graph.0.add(Box::new(unit));
+        let id = graph.0.add(unit);
         graph.0.pipe_output(id);
         edited = true;
 
@@ -336,7 +336,7 @@ pub fn neural_synth_playback_system(
 
         match load_neural_model(&neural.0, source) {
             Ok(unit) => {
-                let id = graph.0.master(unit);
+                let id = graph.0.master_boxed(unit);
                 edited = true;
                 commands
                     .entity(entity)
@@ -383,7 +383,7 @@ pub fn neural_effect_playback_system(
 
         match load_neural_model(&neural.0, source) {
             Ok(unit) => {
-                let id = graph.0.master(unit);
+                let id = graph.0.master_boxed(unit);
                 edited = true;
                 commands
                     .entity(entity)

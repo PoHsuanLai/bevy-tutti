@@ -49,6 +49,6 @@ pub fn device_state_init_system(
         }
     }
     if let Ok(devices) = tutti::TuttiDriver::devices() {
-        state.output_devices = devices.map(|(_, name)| name).collect();
+        state.output_devices = devices.map(|d| d.name).collect();
     }
 }

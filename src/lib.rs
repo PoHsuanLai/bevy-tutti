@@ -31,7 +31,7 @@
 //! ```rust,ignore
 //! fn control_audio(transport: Res<TransportRes>, mut graph: ResMut<TuttiGraphRes>) {
 //!     transport.tempo(128.0).play();
-//!     let id = graph.0.add_unit(tutti::dsp::sine_hz(440.0));
+//!     let id = graph.0.add(tutti::dsp::sine_hz(440.0));
 //!     graph.0.pipe_output(id);
 //!     graph.0.commit();
 //! }
@@ -135,7 +135,7 @@ pub use device_state::{device_state_sync_system, AudioDeviceState};
 #[cfg(feature = "sampler")]
 pub use content_bounds::{content_bounds_sync_system, ContentBounds};
 
-pub use tutti::{NodeId, TuttiDriver, TuttiEngine, TuttiEngineBuilder, TuttiGraph, Wave};
+pub use tutti::{DeviceInfo, NodeId, TuttiDriver, TuttiEngine, TuttiEngineBuilder, TuttiGraph, Wave};
 
 #[cfg(feature = "midi")]
 pub use tutti::midi::{MidiEvent, Note};
@@ -269,10 +269,7 @@ impl std::ops::Deref for TransportRes {
 }
 
 /// Lock-free metering handle (peak/RMS/LUFS/CPU snapshots).
-///
-/// `MeteringHandle` is not `Clone` upstream, so this resource is not `Clone`
-/// either. Systems read via `Res<MeteringRes>` and deref.
-#[derive(Resource)]
+#[derive(Resource, Clone)]
 pub struct MeteringRes(pub tutti::MeteringHandle);
 
 impl std::ops::Deref for MeteringRes {
