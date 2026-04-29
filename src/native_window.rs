@@ -82,3 +82,32 @@ pub fn attach_child_window(
         let _ = (child, parent);
     }
 }
+
+/// Make every existing subview of `host`'s NSView resize with its
+/// parent. Plugins like Surge XT attach their content as a subview
+/// of the parent NSView passed to `IPlugView::attached`; without an
+/// autoresizing mask they stay fixed during a host edge-drag, which
+/// produces a visible flash as the plugin briefly pokes outside (or
+/// is clipped by) the new host bounds.
+pub fn enable_subview_autoresize(host: &bevy_window::RawHandleWrapper) {
+    #[cfg(target_os = "macos")]
+    {
+        use objc2_app_kit::{NSAutoresizingMaskOptions, NSView};
+
+        unsafe {
+            let host_view: &NSView =
+                &*(native_view_ptr(host.get_window_handle()).unwrap() as *const NSView);
+            host_view.setAutoresizesSubviews(true);
+            let mask = NSAutoresizingMaskOptions::ViewWidthSizable
+                | NSAutoresizingMaskOptions::ViewHeightSizable;
+            for subview in host_view.subviews().iter() {
+                subview.setAutoresizingMask(mask);
+            }
+        }
+    }
+
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = host;
+    }
+}

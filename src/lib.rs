@@ -57,6 +57,8 @@ mod midi;
 #[cfg(feature = "neural")]
 mod neural_status;
 #[cfg(feature = "plugin")]
+#[cfg(all(target_os = "macos", feature = "plugin"))]
+mod live_resize;
 pub mod native_window;
 mod systems;
 mod transport;

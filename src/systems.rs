@@ -552,6 +552,34 @@ pub fn plugin_editor_attach_system(
                     attach_child_window(raw_handle, parent_handle);
                 }
 
+                // macOS: drive smooth live resize. AppKit-friendly
+                // formats (VST3/JUCE) get the autoresize mask; the
+                // others (CLAP, AU) get an NSNotificationCenter
+                // observer that calls `set_editor_size` from inside
+                // AppKit's tracking loop.
+                #[cfg(target_os = "macos")]
+                let live_resize = if capabilities.resizable {
+                    if capabilities.appkit_autoresize_friendly {
+                        crate::native_window::enable_subview_autoresize(raw_handle);
+                        None
+                    } else {
+                        let handle = emitter.handle.clone();
+                        let cb: crate::live_resize::ResizeCallback =
+                            std::sync::Arc::new(move |w, h| {
+                                let _ = handle.set_editor_size(
+                                    tutti::plugin::handles::EditorSize {
+                                        width: w,
+                                        height: h,
+                                    },
+                                );
+                            });
+                        // SAFETY: main-thread context.
+                        unsafe { crate::live_resize::LiveResizeHandle::install(raw_handle, cb) }
+                    }
+                } else {
+                    None
+                };
+
                 // Remove RawHandleWrapper so Bevy's renderer doesn't create a
                 // wgpu surface on this window (the plugin owns the rendering).
                 commands
@@ -567,6 +595,8 @@ pub fn plugin_editor_attach_system(
                         height: h,
                         capabilities,
                         last_applied: (w, h),
+                        #[cfg(target_os = "macos")]
+                        live_resize,
                     });
             }
             Err(e) => {
@@ -641,8 +671,10 @@ pub fn plugin_editor_window_resize_system(
     }
 }
 
-/// Polls each open editor for plugin-initiated resize requests and
-/// resizes the host window to match.
+/// Polls each open editor for plugin-initiated resize requests, resizes
+/// the host window, then calls back into the plugin via
+/// `set_editor_size` so it lays out at the new bounds (per Steinberg's
+/// `IPlugFrame::resizeView` contract).
 #[cfg(feature = "plugin")]
 pub fn plugin_editor_resize_request_system(
     _main_thread: NonSend<crate::PluginEditorMainThread>,
@@ -653,13 +685,14 @@ pub fn plugin_editor_resize_request_system(
         let Some(req) = emitter.handle.poll_editor_resize_request() else {
             continue;
         };
-        let new_size = (req.width, req.height);
-        if new_size == editor.last_applied {
+        if (req.width, req.height) == editor.last_applied {
             continue;
         }
-        editor.last_applied = new_size;
+
+        editor.last_applied = (req.width, req.height);
         editor.width = req.width;
         editor.height = req.height;
+
         if let Ok(mut win) = windows.get_mut(editor.editor_window) {
             win.resolution.set(req.width as f32, req.height as f32);
             if !editor.capabilities.resizable {
@@ -669,6 +702,21 @@ pub fn plugin_editor_resize_request_system(
                     max_width: req.width as f32,
                     max_height: req.height as f32,
                 };
+            }
+        }
+
+        // Drive onSize so the plugin lays out at the new bounds. If
+        // the plugin snaps further, last_applied gets a follow-up
+        // update — but we don't loop here.
+        if let Ok(snapped) = emitter.handle.set_editor_size(req) {
+            if (snapped.width, snapped.height) != (req.width, req.height) {
+                editor.last_applied = (snapped.width, snapped.height);
+                editor.width = snapped.width;
+                editor.height = snapped.height;
+                if let Ok(mut win) = windows.get_mut(editor.editor_window) {
+                    win.resolution
+                        .set(snapped.width as f32, snapped.height as f32);
+                }
             }
         }
     }

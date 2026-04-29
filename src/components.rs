@@ -275,6 +275,12 @@ pub struct PluginEditorOpen {
     /// Last size written to either side. A `WindowResized` matching
     /// this is an echo of our own write and is ignored.
     pub last_applied: (u32, u32),
+    /// macOS only: AppKit notification observer that drives
+    /// `set_editor_size` during live drag for plugins that don't
+    /// follow the autoresize mask. Dropped with the editor.
+    #[cfg(all(target_os = "macos", feature = "plugin"))]
+    #[allow(dead_code)]
+    pub(crate) live_resize: Option<crate::live_resize::LiveResizeHandle>,
 }
 
 /// Intermediate state: a Window has been spawned but `open_editor` hasn't

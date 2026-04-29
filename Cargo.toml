@@ -24,7 +24,8 @@ raw-window-handle = { version = "0.6", optional = true }
 # macOS: attach plugin editor window as child of primary window
 [target.'cfg(target_os = "macos")'.dependencies]
 objc2 = { version = "0.6", optional = true }
-objc2-app-kit = { version = "0.3", optional = true, features = ["NSView", "NSWindow"] }
+objc2-app-kit = { version = "0.3", optional = true, features = ["NSView", "NSWindow", "NSResponder"] }
+objc2-foundation = { version = "0.3", optional = true, features = ["NSNotification", "NSString", "NSGeometry", "NSObject", "NSThread"] }
 
 
 # Tutti audio engine (bevy_asset feature required for Asset/TypePath derives on
@@ -68,7 +69,7 @@ sampler = ["tutti/sampler"]
 dsp = ["tutti/dsp"]
 
 # Plugin hosting
-plugin = ["tutti/plugin", "dep:bevy-tokio-tasks", "dep:bevy_window", "dep:raw-window-handle", "dep:objc2", "dep:objc2-app-kit"]
+plugin = ["tutti/plugin", "dep:bevy-tokio-tasks", "dep:bevy_window", "dep:raw-window-handle", "dep:objc2", "dep:objc2-app-kit", "dep:objc2-foundation"]
 vst2 = ["tutti/vst2"]
 vst3 = ["tutti/vst3"]
 clap = ["tutti/clap"]
