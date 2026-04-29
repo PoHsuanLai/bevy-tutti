@@ -28,9 +28,12 @@ objc2-app-kit = { version = "0.3", optional = true, features = ["NSView", "NSWin
 objc2-foundation = { version = "0.3", optional = true, features = ["NSNotification", "NSString", "NSGeometry", "NSObject", "NSThread"] }
 
 
-# Tutti audio engine (bevy_asset feature required for Asset/TypePath derives on
-# Wave, SoundFont, StreamingSample, NeuralModel and the TuttiAsset traits).
-tutti = { path = "../tutti", features = ["bevy_asset"] }
+# Tutti audio engine. `bevy_asset` enables the Asset/TypePath derives on
+# loadable types (Wave, SoundFont, StreamingSample, NeuralModel). `bevy_ecs`
+# enables the `Component` derives on the entity-as-node primitives
+# (`AudioNode`, `Volume`, `Pan`, `Mute`, `PluginParam`) — bevy-tutti supplies
+# the reconcile systems that translate component changes into graph ops.
+tutti = { path = "../tutti", features = ["bevy_asset", "bevy_ecs"] }
 tutti-asset = { path = "../tutti/crates/tutti-asset", features = ["std"] }
 
 # Error handling
@@ -86,3 +89,7 @@ analysis = ["tutti/analysis"]
 
 # Automation
 automation = ["tutti/automation"]
+
+[[example]]
+name = "29_node_entities"
+required-features = ["sampler", "wav"]

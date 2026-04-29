@@ -51,6 +51,7 @@ mod device_state;
 mod dsp_systems;
 #[cfg(feature = "export")]
 mod export_systems;
+pub mod graph_reconcile;
 mod metering;
 #[cfg(feature = "midi")]
 mod midi;
@@ -59,6 +60,7 @@ mod neural_status;
 #[cfg(feature = "plugin")]
 #[cfg(all(target_os = "macos", feature = "plugin"))]
 mod live_resize;
+#[cfg(feature = "plugin")]
 pub mod native_window;
 mod systems;
 mod transport;
@@ -136,6 +138,14 @@ pub use device_state::{device_state_sync_system, AudioDeviceState};
 pub use content_bounds::{content_bounds_sync_system, ContentBounds};
 
 pub use tutti::{DeviceInfo, NodeId, TuttiDriver, TuttiEngine, TuttiEngineBuilder, TuttiGraph, Wave};
+
+// Entity-as-node ECS primitives — re-exported from `tutti` so apps don't
+// need to reach into `tutti::core::ecs` directly.
+pub use tutti::{AudioNode, Mute, NodeKind, Pan, PluginParam, Volume};
+pub use graph_reconcile::{
+    commit_graph, reconcile_node_despawn, reconcile_params, GraphDirty, GraphReconcileSet,
+    SpawnAudioNode,
+};
 
 #[cfg(feature = "midi")]
 pub use tutti::midi::{MidiEvent, Note};
@@ -507,6 +517,7 @@ impl Plugin for TuttiPlugin {
         app.init_resource::<TransportState>();
         app.init_resource::<MasterMeterLevels>();
         app.init_resource::<AudioDeviceState>();
+        app.init_resource::<graph_reconcile::GraphDirty>();
         app.add_systems(
             bevy_app::Startup,
             device_state::device_state_init_system,
@@ -517,6 +528,32 @@ impl Plugin for TuttiPlugin {
                 transport::transport_sync_system,
                 metering::metering_sync_system,
                 device_state::device_state_sync_system,
+            ),
+        );
+
+        // Entity-as-node reconcile pipeline. Runs even when `enable_ecs`
+        // is false because it is itself the ECS layer; opting out of all
+        // ECS systems is what `enable_ecs = false` covers (trigger
+        // components like `PlayAudio`).
+        app.configure_sets(
+            Update,
+            (
+                graph_reconcile::GraphReconcileSet::Spawn,
+                graph_reconcile::GraphReconcileSet::Params,
+                graph_reconcile::GraphReconcileSet::Despawn,
+                graph_reconcile::GraphReconcileSet::Commit,
+            )
+                .chain(),
+        );
+        app.add_systems(
+            Update,
+            (
+                graph_reconcile::reconcile_params
+                    .in_set(graph_reconcile::GraphReconcileSet::Params),
+                graph_reconcile::reconcile_node_despawn
+                    .in_set(graph_reconcile::GraphReconcileSet::Despawn),
+                graph_reconcile::commit_graph
+                    .in_set(graph_reconcile::GraphReconcileSet::Commit),
             ),
         );
 

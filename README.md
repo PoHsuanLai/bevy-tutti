@@ -51,17 +51,49 @@ TuttiPlugin::default().without_ecs()
 
 ## Direct engine access
 
-Every ECS system is optional. You can always drop down to the Tutti API directly:
+Every ECS system is optional. Each subsystem of the engine is its own
+Bevy resource — take only what you need:
 
 ```rust
-fn control(engine: Res<TuttiEngineResource>) {
-    engine.transport().tempo(128.0).play();
-    engine.master().volume(0.9);
-    engine.graph_mut(|net| {
-        net.add(sine_hz::<f32>(440.0)).master();
-    });
+use bevy::prelude::*;
+use bevy_tutti::*;
+use tutti::dsp::sine_hz;
+
+fn control(transport: Res<TransportRes>, mut graph: ResMut<TuttiGraphRes>) {
+    transport.tempo(128.0).play();
+    let id = graph.0.add(sine_hz::<f32>(440.0));
+    graph.0.pipe_output(id);
+    graph.0.commit();
 }
 ```
+
+## Node entities
+
+With the `bevy_ecs` integration baked into `tutti`, audio graph nodes can
+also be spawned as Bevy entities and tuned with normal `Changed<T>` queries.
+The reconcile pipeline (`GraphReconcileSet::{Spawn, Params, Despawn, Commit}`)
+translates component edits into graph operations and coalesces a single
+`graph.commit()` per frame.
+
+```rust
+use bevy::prelude::*;
+use bevy_tutti::*;
+use tutti::dsp::sine_hz;
+
+fn setup(mut commands: Commands) {
+    commands
+        .spawn_audio_node(sine_hz::<f32>(440.0), NodeKind::Generator)
+        .insert(Volume(0.5));
+}
+
+fn fade(mut q: Query<&mut Volume, With<AudioNode>>) {
+    for mut v in &mut q {
+        v.0 = (v.0 - 0.005).max(0.0);
+    }
+}
+```
+
+Despawn the entity to remove the underlying graph node.
 
 ## ECS resources
 
@@ -69,7 +101,9 @@ These resources are synced from the engine every frame via lock-free atomics:
 
 | Resource | Feature | Description |
 |----------|---------|-------------|
-| `TuttiEngineResource` | always | `Arc<TuttiEngine>` -- direct API access |
+| `TuttiGraphRes` | always | `TuttiGraph` -- editable DSP graph |
+| `TransportRes` | always | Lock-free transport handle (play/stop/seek/tempo/loop) |
+| `MeteringRes` | always | Lock-free metering snapshots |
 | `TransportState` | always | Beat position, tempo, play/pause/record/loop state |
 | `MasterMeterLevels` | always | Peak and RMS levels (L/R) |
 | `AudioDeviceState` | always | Output devices, current device, running status |
