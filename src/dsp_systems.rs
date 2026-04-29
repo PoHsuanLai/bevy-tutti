@@ -22,7 +22,7 @@ pub fn dsp_compressor_system(
             tutti::units::Compressor::mono(add.threshold_db, add.ratio, add.attack, add.release)
         }
         .with_makeup(add.makeup_db);
-        let node_id = graph.0.add(Box::new(comp));
+        let node_id = graph.0.add(comp);
         edited = true;
 
         commands
@@ -56,7 +56,7 @@ pub fn dsp_gate_system(
         } else {
             tutti::units::Gate::mono(add.threshold_db, add.attack, add.hold, add.release)
         };
-        let node_id = graph.0.add(Box::new(gate));
+        let node_id = graph.0.add(gate);
         edited = true;
 
         commands
@@ -96,11 +96,11 @@ pub fn dsp_lfo_system(
                 transport.0.clone(),
             );
             lfo.set_depth(add.depth);
-            graph.0.add(Box::new(lfo))
+            graph.0.add(lfo)
         } else {
             let lfo = tutti::units::LfoNode::new(add.shape, add.frequency);
             lfo.set_depth(add.depth);
-            graph.0.add(Box::new(lfo))
+            graph.0.add(lfo)
         };
         edited = true;
 

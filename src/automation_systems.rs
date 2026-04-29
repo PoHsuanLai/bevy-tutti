@@ -19,7 +19,7 @@ pub fn automation_lane_system(
             add.envelope.clone(),
             transport.0.clone(),
         );
-        let node_id = graph.0.add(Box::new(lane));
+        let node_id = graph.0.add(lane);
         edited = true;
 
         commands
