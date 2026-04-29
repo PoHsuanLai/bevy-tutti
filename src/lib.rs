@@ -149,7 +149,8 @@ pub use components::{
 #[cfg(feature = "plugin")]
 pub use systems::{
     plugin_crash_detect_system, plugin_editor_attach_system, plugin_editor_close_system,
-    plugin_editor_idle_system, plugin_editor_open_system,
+    plugin_editor_idle_system, plugin_editor_open_system, plugin_editor_resize_request_system,
+    plugin_editor_window_resize_system,
 };
 #[cfg(feature = "plugin")]
 pub use tutti::plugin::catalog::{
@@ -645,6 +646,10 @@ impl Plugin for TuttiPlugin {
                         systems::plugin_editor_attach_system,
                         systems::plugin_editor_close_system,
                         systems::plugin_editor_idle_system,
+                        systems::plugin_editor_resize_request_system
+                            .after(systems::plugin_editor_idle_system),
+                        systems::plugin_editor_window_resize_system
+                            .after(systems::plugin_editor_resize_request_system),
                         systems::plugin_crash_detect_system,
                     ),
                 );

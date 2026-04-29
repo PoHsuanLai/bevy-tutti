@@ -271,6 +271,10 @@ pub struct PluginEditorOpen {
     pub width: u32,
     /// Editor height in logical pixels as reported by the plugin.
     pub height: u32,
+    pub capabilities: tutti::plugin::handles::EditorCapabilities,
+    /// Last size written to either side. A `WindowResized` matching
+    /// this is an echo of our own write and is ignored.
+    pub last_applied: (u32, u32),
 }
 
 /// Intermediate state: a Window has been spawned but `open_editor` hasn't

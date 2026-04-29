@@ -520,14 +520,30 @@ pub fn plugin_editor_attach_system(
             Ok(size) => {
                 let w = size.width;
                 let h = size.height;
+                let capabilities = emitter.handle.editor_capabilities();
                 bevy_log::info!(
-                    "Plugin '{}' editor opened ({w}x{h})",
-                    emitter.handle.name()
+                    "Plugin '{}' editor opened ({w}x{h}, resizable={})",
+                    emitter.handle.name(),
+                    capabilities.resizable,
                 );
 
-                // Resize and show the window.
                 if let Ok(mut win) = windows.get_mut(pend.window_entity) {
                     win.resolution.set(w as f32, h as f32);
+                    if capabilities.resizable {
+                        win.resize_constraints = bevy_window::WindowResizeConstraints {
+                            min_width: 64.0,
+                            min_height: 64.0,
+                            max_width: f32::INFINITY,
+                            max_height: f32::INFINITY,
+                        };
+                    } else {
+                        win.resize_constraints = bevy_window::WindowResizeConstraints {
+                            min_width: w as f32,
+                            min_height: h as f32,
+                            max_width: w as f32,
+                            max_height: h as f32,
+                        };
+                    }
                     win.visible = true;
                 }
 
@@ -549,6 +565,8 @@ pub fn plugin_editor_attach_system(
                         editor_window: pend.window_entity,
                         width: w,
                         height: h,
+                        capabilities,
+                        last_applied: (w, h),
                     });
             }
             Err(e) => {
@@ -567,6 +585,94 @@ pub fn plugin_editor_attach_system(
 // Platform helpers re-exported for use in this module.
 #[cfg(feature = "plugin")]
 use crate::native_window::attach_child_window;
+
+/// Forwards OS-driven editor-window resizes to the plugin and writes
+/// the plugin's snapped reply back to the window.
+#[cfg(feature = "plugin")]
+pub fn plugin_editor_window_resize_system(
+    _main_thread: NonSend<crate::PluginEditorMainThread>,
+    mut events: bevy_ecs::message::MessageReader<bevy_window::WindowResized>,
+    mut editors: Query<(&PluginEmitter, &mut PluginEditorOpen)>,
+    mut windows: Query<&mut bevy_window::Window>,
+) {
+    for ev in events.read() {
+        let event_size = (ev.width.round() as u32, ev.height.round() as u32);
+        for (emitter, mut editor) in editors.iter_mut() {
+            if editor.editor_window != ev.window {
+                continue;
+            }
+            if !editor.capabilities.resizable {
+                continue;
+            }
+            if event_size == editor.last_applied {
+                continue;
+            }
+
+            let requested = tutti::plugin::handles::EditorSize {
+                width: event_size.0,
+                height: event_size.1,
+            };
+            match emitter.handle.set_editor_size(requested) {
+                Ok(snapped) => {
+                    editor.last_applied = (snapped.width, snapped.height);
+                    editor.width = snapped.width;
+                    editor.height = snapped.height;
+                    if (snapped.width, snapped.height) != event_size {
+                        if let Ok(mut win) = windows.get_mut(ev.window) {
+                            win.resolution.set(snapped.width as f32, snapped.height as f32);
+                        }
+                    }
+                }
+                Err(e) => {
+                    bevy_log::warn!(
+                        "Plugin '{}' refused resize to {}x{}: {}",
+                        emitter.handle.name(),
+                        event_size.0,
+                        event_size.1,
+                        e
+                    );
+                    if let Ok(mut win) = windows.get_mut(ev.window) {
+                        win.resolution
+                            .set(editor.last_applied.0 as f32, editor.last_applied.1 as f32);
+                    }
+                }
+            }
+        }
+    }
+}
+
+/// Polls each open editor for plugin-initiated resize requests and
+/// resizes the host window to match.
+#[cfg(feature = "plugin")]
+pub fn plugin_editor_resize_request_system(
+    _main_thread: NonSend<crate::PluginEditorMainThread>,
+    mut editors: Query<(&PluginEmitter, &mut PluginEditorOpen)>,
+    mut windows: Query<&mut bevy_window::Window>,
+) {
+    for (emitter, mut editor) in editors.iter_mut() {
+        let Some(req) = emitter.handle.poll_editor_resize_request() else {
+            continue;
+        };
+        let new_size = (req.width, req.height);
+        if new_size == editor.last_applied {
+            continue;
+        }
+        editor.last_applied = new_size;
+        editor.width = req.width;
+        editor.height = req.height;
+        if let Ok(mut win) = windows.get_mut(editor.editor_window) {
+            win.resolution.set(req.width as f32, req.height as f32);
+            if !editor.capabilities.resizable {
+                win.resize_constraints = bevy_window::WindowResizeConstraints {
+                    min_width: req.width as f32,
+                    min_height: req.height as f32,
+                    max_width: req.width as f32,
+                    max_height: req.height as f32,
+                };
+            }
+        }
+    }
+}
 
 /// Closes plugin editors for entities with `ClosePluginEditor` trigger.
 #[cfg(feature = "plugin")]
