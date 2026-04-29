@@ -95,6 +95,33 @@ fn fade(mut q: Query<&mut Volume, With<AudioNode>>) {
 
 Despawn the entity to remove the underlying graph node.
 
+### Components
+
+Every component is a thin wrapper over a tutti capability that already
+exists. See [`tutti::core::ecs`] for the parameter components and the
+top-level bevy-tutti module docs for the binding modules.
+
+| Component | Feature | What it binds |
+|-----------|---------|---------------|
+| `AudioNode(NodeId)` | always | Identity for "this entity owns a graph node." |
+| `NodeKind` | always | Typed dispatch tag (Sampler, Plugin, Generator, …). |
+| `Volume`, `Pan`, `Mute` | always | Per-node parameter components. |
+| `PluginParam { id, value }` | `plugin` | RT-safe `PluginHandle::set_parameter` write. |
+| `SamplerSpeed`, `SamplerLooping` | `sampler` | `SamplerUnit::set_speed` / `set_looping`. |
+| `PendingSamplerLoad` | `sampler` | "Load a wave, then build a `SamplerUnit`." |
+| `WaveImportQueue` (resource) | `sampler` | Tracks in-flight `tutti::sampler::file::ImportHandle`s. |
+| `AutomationLaneNode`, `AutomationDrivesParam` | `automation` | Drive `Volume` / `PluginParam` from a `LiveAutomationLane<f32>` output. |
+| `MidiSynthMarker`, `ScheduledMidi` | `midi` | Time-delayed MIDI dispatch via `MidiBusRes`. |
+| `SidechainOf`, `SidechainSources` | always | Wire one entity's audio into another's input port 1. |
+| `PendingVst2Build` | `plugin` + `vst2` | Main-thread VST2 loader (avoids JUCE MessageManager mis-binding). |
+
+### Helpers
+
+| Helper | Where | What it does |
+|--------|-------|--------------|
+| `Commands::spawn_audio_node(unit, kind)` | always | Add `unit` to the graph + spawn an entity with `AudioNode + NodeKind`. |
+| `crossfade_audio_node(commands, entity, new_unit)` | always | `TuttiGraph::crossfade_boxed` for entity-as-node, same `NodeId` survives. |
+
 ## ECS resources
 
 These resources are synced from the engine every frame via lock-free atomics:

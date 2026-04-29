@@ -23,7 +23,14 @@ use tutti::dsp::AudioUnit;
 use crate::TuttiGraphRes;
 
 #[cfg(feature = "sampler")]
+use tutti::core::ecs::{SamplerLooping, SamplerSpeed};
+#[cfg(feature = "sampler")]
 use tutti::sampler::SamplerUnit;
+
+#[cfg(feature = "plugin")]
+use tutti::core::ecs::PluginParam;
+#[cfg(feature = "plugin")]
+use crate::components::PluginEmitter;
 
 /// System-set ordering anchor for the reconcile pipeline.
 ///
@@ -107,6 +114,52 @@ impl<'w, 's> SpawnAudioNode for Commands<'w, 's> {
     }
 }
 
+/// Crossfade-replace an entity's underlying graph node with `new_unit`.
+///
+/// Queues a deferred world command that:
+///
+/// 1. Looks up the entity's [`AudioNode(NodeId)`](AudioNode).
+/// 2. Calls [`TuttiGraph::crossfade_boxed`] with a 5 ms `Smooth` fade.
+/// 3. Marks [`GraphDirty`] so the per-frame [`commit_graph`] flushes.
+///
+/// The same `NodeId` survives the crossfade — connections to/from this node
+/// stay valid. Callers don't need to update any other components.
+///
+/// Use this for parameter changes that aren't safe to mutate live (e.g. a
+/// filter cutoff baked into the unit at construction, a sampler loop range
+/// that requires re-priming the streamer). For RT-safe atomic changes
+/// (`Volume`, `Mute`, `SamplerSpeed`, `PluginParam`, …), edit the
+/// component instead and let the reconcile pipeline handle it.
+///
+/// If the entity has no `AudioNode` (e.g. it was despawned), or the
+/// graph resource is missing, this is a no-op and logs a warning.
+pub fn crossfade_audio_node(
+    commands: &mut Commands<'_, '_>,
+    entity: Entity,
+    new_unit: Box<dyn AudioUnit>,
+) {
+    commands.queue(move |world: &mut World| {
+        let Some(node) = world.get::<AudioNode>(entity).copied() else {
+            bevy_log::warn!(
+                "crossfade_audio_node: entity {:?} has no AudioNode; nothing to crossfade",
+                entity
+            );
+            return;
+        };
+        let Some(mut graph) = world.get_resource_mut::<TuttiGraphRes>() else {
+            bevy_log::warn!(
+                "crossfade_audio_node: TuttiGraphRes missing; entity {:?} not crossfaded",
+                entity
+            );
+            return;
+        };
+        graph.0.crossfade_boxed(node.0, tutti::Fade::Smooth, 0.005, new_unit);
+        if let Some(mut dirty) = world.get_resource_mut::<GraphDirty>() {
+            dirty.0 = true;
+        }
+    });
+}
+
 /// Removes graph nodes for entities whose `AudioNode` component was removed
 /// (including despawned entities).
 ///
@@ -175,6 +228,64 @@ pub fn reconcile_params(
                 let _ = (target, node);
             }
         }
+    }
+}
+
+#[cfg(feature = "sampler")]
+type ChangedSamplerParams<'w> = (
+    &'w AudioNode,
+    &'w NodeKind,
+    Option<&'w SamplerSpeed>,
+    Option<&'w SamplerLooping>,
+);
+#[cfg(feature = "sampler")]
+type ChangedSamplerFilter = Or<(Changed<SamplerSpeed>, Changed<SamplerLooping>)>;
+
+/// Reconciles `Changed<SamplerSpeed>` and `Changed<SamplerLooping>` into
+/// the underlying [`SamplerUnit`].
+///
+/// `SamplerSpeed` writes through `SamplerUnit::set_speed` (`&mut self`,
+/// reached via `node_mut::<SamplerUnit>`). `SamplerLooping` writes through
+/// `SamplerUnit::set_looping` (atomic, `&self`) — it doesn't strictly
+/// require `node_mut`, but using it here keeps the dispatch shape uniform
+/// and lets the dirty flag coalesce a single commit per frame regardless
+/// of which sampler param changed.
+#[cfg(feature = "sampler")]
+pub fn reconcile_sampler_params(
+    graph: Option<ResMut<TuttiGraphRes>>,
+    changed: Query<ChangedSamplerParams, ChangedSamplerFilter>,
+    mut dirty: ResMut<GraphDirty>,
+) {
+    let Some(mut graph) = graph else { return };
+
+    for (node, kind, speed, looping) in changed.iter() {
+        if !matches!(*kind, NodeKind::Sampler) {
+            continue;
+        }
+        let Some(unit) = graph.0.node_mut::<SamplerUnit>(node.0) else {
+            continue;
+        };
+        if let Some(s) = speed {
+            unit.set_speed(s.0);
+        }
+        if let Some(l) = looping {
+            unit.set_looping(l.0);
+        }
+        dirty.0 = true;
+    }
+}
+
+/// Reconciles `Changed<PluginParam>` into the bound [`PluginEmitter`].
+///
+/// `PluginHandle::set_parameter` is RT-safe fire-and-forget; the call
+/// publishes to a lock-free channel that the audio thread drains. No
+/// graph mutation happens here, so we don't touch `GraphDirty`.
+#[cfg(feature = "plugin")]
+pub fn reconcile_plugin_params(
+    changed: Query<(&PluginEmitter, &PluginParam), Changed<PluginParam>>,
+) {
+    for (emitter, param) in changed.iter() {
+        emitter.handle.set_parameter(param.id, param.value);
     }
 }
 
@@ -273,5 +384,76 @@ mod tests {
         // NodeKind::Sampler entity sets the dirty flag. Real sampler
         // construction needs an asset, which is beyond a unit test here.
         // The dispatch arm itself is covered by the example.
+    }
+
+    #[test]
+    fn crossfade_replaces_node_in_place() {
+        let mut app = test_app();
+        let entity = {
+            let mut c = app.world_mut().commands();
+            c.spawn_audio_node(sine_hz::<f32>(440.0), NodeKind::Generator).id()
+        };
+        app.update();
+
+        let node_id_before = app.world().get::<AudioNode>(entity).expect("AudioNode").0;
+        assert!(app.world().resource::<crate::TuttiGraphRes>().0.contains(node_id_before));
+
+        // Replace with a different oscillator — same NodeId, new unit.
+        {
+            let mut c = app.world_mut().commands();
+            crossfade_audio_node(&mut c, entity, Box::new(sine_hz::<f32>(220.0)));
+        }
+        app.update();
+
+        // Same NodeId stays — that's the contract of crossfade.
+        let node_id_after = app.world().get::<AudioNode>(entity).expect("AudioNode").0;
+        assert_eq!(node_id_before, node_id_after);
+        assert!(app.world().resource::<crate::TuttiGraphRes>().0.contains(node_id_after));
+    }
+
+    #[test]
+    #[cfg(feature = "sampler")]
+    fn sampler_speed_and_looping_change_writes_through() {
+        use std::sync::Arc;
+        use tutti::core::ecs::{SamplerLooping, SamplerSpeed};
+        use tutti::sampler::SamplerUnit;
+        use tutti::Wave;
+
+        let mut app = test_app();
+        // Add the sampler reconcile system on top of the base test_app set.
+        app.add_systems(
+            bevy_app::Update,
+            reconcile_sampler_params.in_set(GraphReconcileSet::Params),
+        );
+
+        // Build a tiny silent wave (1 channel, 1 sample) just to hand to the
+        // sampler. We never tick audio in this test.
+        let mut wave = Wave::new(1, 48_000.0);
+        wave.push(0.0);
+        let unit = SamplerUnit::new(Arc::new(wave));
+
+        let entity = {
+            let mut c = app.world_mut().commands();
+            c.spawn_audio_node(unit, NodeKind::Sampler)
+                .insert((SamplerSpeed(1.0), SamplerLooping(false)))
+                .id()
+        };
+        app.update();
+
+        // Mutate both params; reconciler should write into the SamplerUnit.
+        {
+            let world = app.world_mut();
+            let mut speed = world.get_mut::<SamplerSpeed>(entity).unwrap();
+            speed.0 = 2.0;
+            let mut looping = world.get_mut::<SamplerLooping>(entity).unwrap();
+            looping.0 = true;
+        }
+        app.update();
+
+        let node_id = app.world().get::<AudioNode>(entity).expect("AudioNode").0;
+        let mut graph = app.world_mut().resource_mut::<crate::TuttiGraphRes>();
+        let unit = graph.0.node_mut::<SamplerUnit>(node_id).expect("SamplerUnit");
+        assert_eq!(unit.speed(), 2.0);
+        assert!(unit.is_looping());
     }
 }

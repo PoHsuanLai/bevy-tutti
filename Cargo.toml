@@ -93,3 +93,7 @@ automation = ["tutti/automation"]
 [[example]]
 name = "29_node_entities"
 required-features = ["sampler", "wav"]
+
+[[example]]
+name = "30_full_pipeline"
+required-features = ["sampler", "wav", "automation"]

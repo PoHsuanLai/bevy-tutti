@@ -52,6 +52,15 @@ mod dsp_systems;
 #[cfg(feature = "export")]
 mod export_systems;
 pub mod graph_reconcile;
+#[cfg(feature = "automation")]
+pub mod automation_bind;
+#[cfg(feature = "sampler")]
+pub mod pending_load;
+#[cfg(feature = "midi")]
+pub mod scheduled;
+pub mod sidechain;
+#[cfg(all(feature = "plugin", feature = "vst2"))]
+pub mod vst2_load;
 mod metering;
 #[cfg(feature = "midi")]
 mod midi;
@@ -142,9 +151,28 @@ pub use tutti::{DeviceInfo, NodeId, TuttiDriver, TuttiEngine, TuttiEngineBuilder
 // Entity-as-node ECS primitives — re-exported from `tutti` so apps don't
 // need to reach into `tutti::core::ecs` directly.
 pub use tutti::{AudioNode, Mute, NodeKind, Pan, PluginParam, Volume};
+#[cfg(feature = "sampler")]
+pub use tutti::{SamplerLooping, SamplerSpeed};
 pub use graph_reconcile::{
-    commit_graph, reconcile_node_despawn, reconcile_params, GraphDirty, GraphReconcileSet,
-    SpawnAudioNode,
+    commit_graph, crossfade_audio_node, reconcile_node_despawn, reconcile_params, GraphDirty,
+    GraphReconcileSet, SpawnAudioNode,
+};
+#[cfg(feature = "sampler")]
+pub use graph_reconcile::reconcile_sampler_params;
+#[cfg(feature = "sampler")]
+pub use pending_load::{
+    poll_wave_imports, promote_pending_samplers, PendingSamplerLoad, WaveImportQueue,
+};
+#[cfg(feature = "midi")]
+pub use scheduled::{tick_scheduled_midi, MidiSynthMarker, ScheduledMidi};
+pub use sidechain::{reconcile_sidechain_links, SidechainOf, SidechainSources};
+#[cfg(all(feature = "plugin", feature = "vst2"))]
+pub use vst2_load::{process_pending_vst2_builds, PendingVst2Build};
+#[cfg(feature = "plugin")]
+pub use graph_reconcile::reconcile_plugin_params;
+#[cfg(feature = "automation")]
+pub use automation_bind::{
+    reconcile_automation_writes, AutomationDrivesParam, AutomationLaneNode, AutomationParam,
 };
 
 #[cfg(feature = "midi")]
@@ -554,6 +582,8 @@ impl Plugin for TuttiPlugin {
                     .in_set(graph_reconcile::GraphReconcileSet::Despawn),
                 graph_reconcile::commit_graph
                     .in_set(graph_reconcile::GraphReconcileSet::Commit),
+                sidechain::reconcile_sidechain_links
+                    .in_set(graph_reconcile::GraphReconcileSet::Spawn),
             ),
         );
 
@@ -561,6 +591,32 @@ impl Plugin for TuttiPlugin {
         {
             app.init_resource::<content_bounds::ContentBounds>();
             app.add_systems(Update, content_bounds::content_bounds_sync_system);
+            app.add_systems(
+                Update,
+                graph_reconcile::reconcile_sampler_params
+                    .in_set(graph_reconcile::GraphReconcileSet::Params),
+            );
+
+            app.init_resource::<pending_load::WaveImportQueue>();
+            app.add_systems(
+                Update,
+                (
+                    pending_load::poll_wave_imports,
+                    pending_load::promote_pending_samplers
+                        .after(pending_load::poll_wave_imports)
+                        .in_set(graph_reconcile::GraphReconcileSet::Spawn),
+                ),
+            );
+        }
+
+        #[cfg(feature = "automation")]
+        {
+            app.add_systems(
+                Update,
+                automation_bind::reconcile_automation_writes
+                    .in_set(graph_reconcile::GraphReconcileSet::Params)
+                    .before(graph_reconcile::reconcile_params),
+            );
         }
 
         #[cfg(feature = "analysis")]
@@ -643,6 +699,8 @@ impl Plugin for TuttiPlugin {
                     )
                         .chain(),
                 );
+
+                app.add_systems(Update, scheduled::tick_scheduled_midi);
             }
 
             #[cfg(feature = "mpe")]
@@ -688,6 +746,19 @@ impl Plugin for TuttiPlugin {
                             .after(systems::plugin_editor_resize_request_system),
                         systems::plugin_crash_detect_system,
                     ),
+                );
+
+                app.add_systems(
+                    Update,
+                    graph_reconcile::reconcile_plugin_params
+                        .in_set(graph_reconcile::GraphReconcileSet::Params),
+                );
+
+                #[cfg(feature = "vst2")]
+                app.add_systems(
+                    Update,
+                    vst2_load::process_pending_vst2_builds
+                        .in_set(graph_reconcile::GraphReconcileSet::Spawn),
                 );
             }
 

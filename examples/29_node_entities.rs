@@ -85,7 +85,7 @@ fn log_state(
     mut tick: Local<u32>,
 ) {
     *tick = tick.wrapping_add(1);
-    if *tick % 30 == 0 {
+    if (*tick).is_multiple_of(30) {
         let vol = q.single().map(|v| v.0).unwrap_or(0.0);
         bevy_log::info!(
             "Volume = {:.3} | peak L/R = {:.3} / {:.3}",
