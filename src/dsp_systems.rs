@@ -90,15 +90,12 @@ pub fn dsp_lfo_system(
                 bevy_log::warn!("Beat-synced LFO requested but no TransportRes available");
                 continue;
             };
-            let lfo = tutti::units::LfoNode::with_transport(
-                add.shape,
-                add.frequency,
-                transport.0.clone(),
-            );
+            let lfo = tutti::units::LfoNode::new(add.shape)
+                .with_beat_sync(transport.0.clone(), add.frequency);
             lfo.set_depth(add.depth);
             graph.0.add(lfo)
         } else {
-            let lfo = tutti::units::LfoNode::new(add.shape, add.frequency);
+            let lfo = tutti::units::LfoNode::new(add.shape).with_frequency(add.frequency);
             lfo.set_depth(add.depth);
             graph.0.add(lfo)
         };
