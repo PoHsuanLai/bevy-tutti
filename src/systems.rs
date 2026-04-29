@@ -520,14 +520,30 @@ pub fn plugin_editor_attach_system(
             Ok(size) => {
                 let w = size.width;
                 let h = size.height;
+                let capabilities = emitter.handle.editor_capabilities();
                 bevy_log::info!(
-                    "Plugin '{}' editor opened ({w}x{h})",
-                    emitter.handle.name()
+                    "Plugin '{}' editor opened ({w}x{h}, resizable={})",
+                    emitter.handle.name(),
+                    capabilities.resizable,
                 );
 
-                // Resize and show the window.
                 if let Ok(mut win) = windows.get_mut(pend.window_entity) {
                     win.resolution.set(w as f32, h as f32);
+                    if capabilities.resizable {
+                        win.resize_constraints = bevy_window::WindowResizeConstraints {
+                            min_width: 64.0,
+                            min_height: 64.0,
+                            max_width: f32::INFINITY,
+                            max_height: f32::INFINITY,
+                        };
+                    } else {
+                        win.resize_constraints = bevy_window::WindowResizeConstraints {
+                            min_width: w as f32,
+                            min_height: h as f32,
+                            max_width: w as f32,
+                            max_height: h as f32,
+                        };
+                    }
                     win.visible = true;
                 }
 
@@ -535,6 +551,34 @@ pub fn plugin_editor_attach_system(
                 if let Ok(parent_handle) = primary.single() {
                     attach_child_window(raw_handle, parent_handle);
                 }
+
+                // macOS: drive smooth live resize. AppKit-friendly
+                // formats (VST3/JUCE) get the autoresize mask; the
+                // others (CLAP, AU) get an NSNotificationCenter
+                // observer that calls `set_editor_size` from inside
+                // AppKit's tracking loop.
+                #[cfg(target_os = "macos")]
+                let live_resize = if capabilities.resizable {
+                    if capabilities.appkit_autoresize_friendly {
+                        crate::native_window::enable_subview_autoresize(raw_handle);
+                        None
+                    } else {
+                        let handle = emitter.handle.clone();
+                        let cb: crate::live_resize::ResizeCallback =
+                            std::sync::Arc::new(move |w, h| {
+                                let _ = handle.set_editor_size(
+                                    tutti::plugin::handles::EditorSize {
+                                        width: w,
+                                        height: h,
+                                    },
+                                );
+                            });
+                        // SAFETY: main-thread context.
+                        unsafe { crate::live_resize::LiveResizeHandle::install(raw_handle, cb) }
+                    }
+                } else {
+                    None
+                };
 
                 // Remove RawHandleWrapper so Bevy's renderer doesn't create a
                 // wgpu surface on this window (the plugin owns the rendering).
@@ -549,6 +593,10 @@ pub fn plugin_editor_attach_system(
                         editor_window: pend.window_entity,
                         width: w,
                         height: h,
+                        capabilities,
+                        last_applied: (w, h),
+                        #[cfg(target_os = "macos")]
+                        live_resize,
                     });
             }
             Err(e) => {
@@ -567,6 +615,112 @@ pub fn plugin_editor_attach_system(
 // Platform helpers re-exported for use in this module.
 #[cfg(feature = "plugin")]
 use crate::native_window::attach_child_window;
+
+/// Forwards OS-driven editor-window resizes to the plugin and writes
+/// the plugin's snapped reply back to the window.
+#[cfg(feature = "plugin")]
+pub fn plugin_editor_window_resize_system(
+    _main_thread: NonSend<crate::PluginEditorMainThread>,
+    mut events: bevy_ecs::message::MessageReader<bevy_window::WindowResized>,
+    mut editors: Query<(&PluginEmitter, &mut PluginEditorOpen)>,
+    mut windows: Query<&mut bevy_window::Window>,
+) {
+    for ev in events.read() {
+        let event_size = (ev.width.round() as u32, ev.height.round() as u32);
+        for (emitter, mut editor) in editors.iter_mut() {
+            if editor.editor_window != ev.window {
+                continue;
+            }
+            if !editor.capabilities.resizable {
+                continue;
+            }
+            if event_size == editor.last_applied {
+                continue;
+            }
+
+            let requested = tutti::plugin::handles::EditorSize {
+                width: event_size.0,
+                height: event_size.1,
+            };
+            match emitter.handle.set_editor_size(requested) {
+                Ok(snapped) => {
+                    editor.last_applied = (snapped.width, snapped.height);
+                    editor.width = snapped.width;
+                    editor.height = snapped.height;
+                    if (snapped.width, snapped.height) != event_size {
+                        if let Ok(mut win) = windows.get_mut(ev.window) {
+                            win.resolution.set(snapped.width as f32, snapped.height as f32);
+                        }
+                    }
+                }
+                Err(e) => {
+                    bevy_log::warn!(
+                        "Plugin '{}' refused resize to {}x{}: {}",
+                        emitter.handle.name(),
+                        event_size.0,
+                        event_size.1,
+                        e
+                    );
+                    if let Ok(mut win) = windows.get_mut(ev.window) {
+                        win.resolution
+                            .set(editor.last_applied.0 as f32, editor.last_applied.1 as f32);
+                    }
+                }
+            }
+        }
+    }
+}
+
+/// Polls each open editor for plugin-initiated resize requests, resizes
+/// the host window, then calls back into the plugin via
+/// `set_editor_size` so it lays out at the new bounds (per Steinberg's
+/// `IPlugFrame::resizeView` contract).
+#[cfg(feature = "plugin")]
+pub fn plugin_editor_resize_request_system(
+    _main_thread: NonSend<crate::PluginEditorMainThread>,
+    mut editors: Query<(&PluginEmitter, &mut PluginEditorOpen)>,
+    mut windows: Query<&mut bevy_window::Window>,
+) {
+    for (emitter, mut editor) in editors.iter_mut() {
+        let Some(req) = emitter.handle.poll_editor_resize_request() else {
+            continue;
+        };
+        if (req.width, req.height) == editor.last_applied {
+            continue;
+        }
+
+        editor.last_applied = (req.width, req.height);
+        editor.width = req.width;
+        editor.height = req.height;
+
+        if let Ok(mut win) = windows.get_mut(editor.editor_window) {
+            win.resolution.set(req.width as f32, req.height as f32);
+            if !editor.capabilities.resizable {
+                win.resize_constraints = bevy_window::WindowResizeConstraints {
+                    min_width: req.width as f32,
+                    min_height: req.height as f32,
+                    max_width: req.width as f32,
+                    max_height: req.height as f32,
+                };
+            }
+        }
+
+        // Drive onSize so the plugin lays out at the new bounds. If
+        // the plugin snaps further, last_applied gets a follow-up
+        // update — but we don't loop here.
+        if let Ok(snapped) = emitter.handle.set_editor_size(req) {
+            if (snapped.width, snapped.height) != (req.width, req.height) {
+                editor.last_applied = (snapped.width, snapped.height);
+                editor.width = snapped.width;
+                editor.height = snapped.height;
+                if let Ok(mut win) = windows.get_mut(editor.editor_window) {
+                    win.resolution
+                        .set(snapped.width as f32, snapped.height as f32);
+                }
+            }
+        }
+    }
+}
 
 /// Closes plugin editors for entities with `ClosePluginEditor` trigger.
 #[cfg(feature = "plugin")]
