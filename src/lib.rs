@@ -266,10 +266,7 @@ impl std::ops::Deref for TransportRes {
 }
 
 /// Lock-free metering handle (peak/RMS/LUFS/CPU snapshots).
-///
-/// `MeteringHandle` is not `Clone` upstream, so this resource is not `Clone`
-/// either. Systems read via `Res<MeteringRes>` and deref.
-#[derive(Resource)]
+#[derive(Resource, Clone)]
 pub struct MeteringRes(pub tutti::MeteringHandle);
 
 impl std::ops::Deref for MeteringRes {
