@@ -133,7 +133,7 @@ pub use device_state::{device_state_sync_system, AudioDeviceState};
 #[cfg(feature = "sampler")]
 pub use content_bounds::{content_bounds_sync_system, ContentBounds};
 
-pub use tutti::{NodeId, TuttiDriver, TuttiEngine, TuttiEngineBuilder, TuttiGraph, Wave};
+pub use tutti::{DeviceInfo, NodeId, TuttiDriver, TuttiEngine, TuttiEngineBuilder, TuttiGraph, Wave};
 
 #[cfg(feature = "midi")]
 pub use tutti::midi::{MidiEvent, Note};
