@@ -258,11 +258,16 @@ pub use components::AddLfo;
 pub use dsp_systems::dsp_lfo_system;
 pub use tutti::units::{LfoMode, LfoNode, LfoShape};
 #[cfg(feature = "dsp")]
-pub use components::{AddCompressor, AddGate};
+pub use components::{AddChorus, AddCompressor, AddDelay, AddFilter, AddGate, AddReverb};
 #[cfg(feature = "dsp")]
-pub use dsp_systems::{dsp_compressor_system, dsp_gate_system};
+pub use dsp_systems::{
+    dsp_chorus_system, dsp_compressor_system, dsp_delay_system, dsp_filter_system,
+    dsp_gate_system, dsp_reverb_system,
+};
 #[cfg(feature = "dsp")]
-pub use tutti::units::{Compressor, Gate};
+pub use tutti::units::{
+    ChorusNode, Compressor, Gate, StereoDelayLineNode, StereoSvfFilterNode, SvfType,
+};
 
 // =========================================================================
 // Resource wrappers around the flat TuttiEngine bundle.
@@ -833,6 +838,20 @@ impl Plugin for TuttiPlugin {
                     (
                         dsp_systems::dsp_compressor_system,
                         dsp_systems::dsp_gate_system,
+                        dsp_systems::dsp_filter_system,
+                        dsp_systems::dsp_reverb_system,
+                        dsp_systems::dsp_delay_system,
+                        dsp_systems::dsp_chorus_system,
+                        graph_reconcile::reconcile_filter_params
+                            .in_set(graph_reconcile::GraphReconcileSet::Params),
+                        graph_reconcile::reconcile_delay_params
+                            .in_set(graph_reconcile::GraphReconcileSet::Params),
+                        graph_reconcile::reconcile_chorus_params
+                            .in_set(graph_reconcile::GraphReconcileSet::Params),
+                        graph_reconcile::reconcile_compressor_params
+                            .in_set(graph_reconcile::GraphReconcileSet::Params),
+                        graph_reconcile::reconcile_gate_params
+                            .in_set(graph_reconcile::GraphReconcileSet::Params),
                     ),
                 );
             }

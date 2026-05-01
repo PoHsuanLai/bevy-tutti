@@ -289,6 +289,238 @@ pub fn reconcile_plugin_params(
     }
 }
 
+// =============================================================================
+// Effect-family parameter reconcilers.
+//
+// Each one runs in `GraphReconcileSet::Params`, queries entities with
+// the right `NodeKind` and a Changed<X> on any param it owns, then
+// writes through the unit's typed setter (lock-free atomic store —
+// no graph mutation, so `GraphDirty` stays untouched).
+// =============================================================================
+
+#[cfg(feature = "dsp")]
+use tutti::core::ecs::{
+    Attack, CompressorRatio, DelayTime, Feedback, FilterQ, Frequency, GainDb, ModDepth, ModRate,
+    Release, ReverbDamping, ReverbRoomSize, ThresholdDb, WetMix,
+};
+
+#[cfg(feature = "dsp")]
+type FilterChangedFilter =
+    Or<(Changed<Frequency>, Changed<FilterQ>, Changed<GainDb>)>;
+
+/// Reconciles `Changed<Frequency>` / `Changed<FilterQ>` / `Changed<GainDb>`
+/// into a `StereoSvfFilterNode<f64>` for entities with [`NodeKind::Filter`].
+#[cfg(feature = "dsp")]
+pub fn reconcile_filter_params(
+    graph: Option<ResMut<TuttiGraphRes>>,
+    changed: Query<
+        (&AudioNode, &NodeKind, Option<&Frequency>, Option<&FilterQ>, Option<&GainDb>),
+        FilterChangedFilter,
+    >,
+) {
+    let Some(mut graph) = graph else { return };
+    for (node, kind, freq, q, gain) in changed.iter() {
+        if !matches!(*kind, NodeKind::Filter) {
+            continue;
+        }
+        let Some(unit) =
+            graph.0.node_mut::<tutti::units::StereoSvfFilterNode<f64>>(node.0)
+        else {
+            continue;
+        };
+        if let Some(f) = freq {
+            unit.set_frequency(f.0);
+        }
+        if let Some(q) = q {
+            unit.set_q(q.0);
+        }
+        if let Some(g) = gain {
+            unit.set_gain_db(g.0);
+        }
+    }
+}
+
+#[cfg(feature = "dsp")]
+type DelayChangedFilter = Or<(Changed<DelayTime>, Changed<Feedback>, Changed<WetMix>)>;
+
+/// Reconciles `Changed<DelayTime>` / `Changed<Feedback>` / `Changed<WetMix>`
+/// into a `StereoDelayLineNode` for entities with [`NodeKind::Delay`].
+#[cfg(feature = "dsp")]
+pub fn reconcile_delay_params(
+    graph: Option<ResMut<TuttiGraphRes>>,
+    changed: Query<
+        (&AudioNode, &NodeKind, Option<&DelayTime>, Option<&Feedback>, Option<&WetMix>),
+        DelayChangedFilter,
+    >,
+) {
+    let Some(mut graph) = graph else { return };
+    for (node, kind, time, fb, wet) in changed.iter() {
+        if !matches!(*kind, NodeKind::Delay) {
+            continue;
+        }
+        let Some(unit) = graph.0.node_mut::<tutti::units::StereoDelayLineNode>(node.0) else {
+            continue;
+        };
+        if let Some(t) = time {
+            unit.set_delay_time(t.0);
+        }
+        if let Some(f) = fb {
+            unit.set_feedback(f.0);
+        }
+        if let Some(w) = wet {
+            unit.set_mix(w.0);
+        }
+    }
+}
+
+#[cfg(feature = "dsp")]
+type ChorusChangedFilter = Or<(
+    Changed<ModRate>,
+    Changed<ModDepth>,
+    Changed<Feedback>,
+    Changed<WetMix>,
+)>;
+
+/// Reconciles chorus params into a `ChorusNode` for entities with
+/// [`NodeKind::Chorus`].
+#[cfg(feature = "dsp")]
+pub fn reconcile_chorus_params(
+    graph: Option<ResMut<TuttiGraphRes>>,
+    changed: Query<
+        (
+            &AudioNode,
+            &NodeKind,
+            Option<&ModRate>,
+            Option<&ModDepth>,
+            Option<&Feedback>,
+            Option<&WetMix>,
+        ),
+        ChorusChangedFilter,
+    >,
+) {
+    let Some(mut graph) = graph else { return };
+    for (node, kind, rate, depth, fb, wet) in changed.iter() {
+        if !matches!(*kind, NodeKind::Chorus) {
+            continue;
+        }
+        let Some(unit) = graph.0.node_mut::<tutti::units::ChorusNode>(node.0) else {
+            continue;
+        };
+        if let Some(r) = rate {
+            unit.set_rate(r.0);
+        }
+        if let Some(d) = depth {
+            unit.set_depth(d.0);
+        }
+        if let Some(f) = fb {
+            unit.set_feedback(f.0);
+        }
+        if let Some(w) = wet {
+            unit.set_mix(w.0);
+        }
+    }
+}
+
+#[cfg(feature = "dsp")]
+type CompressorChangedFilter = Or<(
+    Changed<ThresholdDb>,
+    Changed<CompressorRatio>,
+    Changed<Attack>,
+    Changed<Release>,
+    Changed<GainDb>,
+)>;
+
+/// Reconciles compressor params into a `Compressor` for entities with
+/// [`NodeKind::Compressor`].
+#[cfg(feature = "dsp")]
+pub fn reconcile_compressor_params(
+    graph: Option<ResMut<TuttiGraphRes>>,
+    changed: Query<
+        (
+            &AudioNode,
+            &NodeKind,
+            Option<&ThresholdDb>,
+            Option<&CompressorRatio>,
+            Option<&Attack>,
+            Option<&Release>,
+            Option<&GainDb>,
+        ),
+        CompressorChangedFilter,
+    >,
+) {
+    let Some(mut graph) = graph else { return };
+    for (node, kind, thresh, ratio, attack, release, makeup) in changed.iter() {
+        if !matches!(*kind, NodeKind::Compressor) {
+            continue;
+        }
+        let Some(unit) = graph.0.node_mut::<tutti::units::Compressor>(node.0) else {
+            continue;
+        };
+        if let Some(t) = thresh {
+            unit.set_threshold(t.0);
+        }
+        if let Some(r) = ratio {
+            unit.set_ratio(r.0);
+        }
+        if let Some(a) = attack {
+            unit.set_attack(a.0);
+        }
+        if let Some(r) = release {
+            unit.set_release(r.0);
+        }
+        if let Some(m) = makeup {
+            unit.set_makeup(m.0);
+        }
+    }
+}
+
+#[cfg(feature = "dsp")]
+type GateChangedFilter =
+    Or<(Changed<ThresholdDb>, Changed<Attack>, Changed<Release>)>;
+
+/// Reconciles gate params into a `Gate` for entities with
+/// [`NodeKind::Gate`]. Threshold / attack / release write through the
+/// gate's atomic accessors.
+#[cfg(feature = "dsp")]
+pub fn reconcile_gate_params(
+    graph: Option<ResMut<TuttiGraphRes>>,
+    changed: Query<
+        (
+            &AudioNode,
+            &NodeKind,
+            Option<&ThresholdDb>,
+            Option<&Attack>,
+            Option<&Release>,
+        ),
+        GateChangedFilter,
+    >,
+) {
+    use tutti::core::{Db, Linear, Seconds};
+    let Some(mut graph) = graph else { return };
+    for (node, kind, thresh, attack, release) in changed.iter() {
+        if !matches!(*kind, NodeKind::Gate) {
+            continue;
+        }
+        let Some(unit) = graph.0.node_mut::<tutti::units::Gate>(node.0) else {
+            continue;
+        };
+        let _ = (Db, Linear, Seconds);
+        if let Some(t) = thresh {
+            // Gate threshold is published as a ParamHandle<Db>; the
+            // atomic accessor (`unit.threshold()`) is the RT-safe path.
+            unit.threshold().store(t.0, std::sync::atomic::Ordering::Release);
+        }
+        if let Some(a) = attack {
+            unit.attack_time()
+                .store(a.0, std::sync::atomic::Ordering::Release);
+        }
+        if let Some(r) = release {
+            unit.release_time()
+                .store(r.0, std::sync::atomic::Ordering::Release);
+        }
+    }
+}
+
 /// Runs `graph.commit()` once iff any reconcile system mutated the graph.
 pub fn commit_graph(graph: Option<ResMut<TuttiGraphRes>>, mut dirty: ResMut<GraphDirty>) {
     if !dirty.0 {
