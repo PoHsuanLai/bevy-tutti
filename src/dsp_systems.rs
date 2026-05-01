@@ -224,7 +224,11 @@ pub fn dsp_reverb_system(
     let Some(mut graph) = graph else { return };
 
     for (entity, add) in query.iter() {
-        let reverb = tutti::dsp::reverb_stereo(add.room_size, add.time_secs, add.damping);
+        let reverb = tutti::dsp::reverb_stereo(
+            add.room_size as f64,
+            add.time_secs as f64,
+            add.damping as f64,
+        );
         let node_id = graph.0.add(reverb);
         dirty.0 = true;
 
