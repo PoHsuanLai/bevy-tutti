@@ -151,6 +151,11 @@ pub use tutti::{DeviceInfo, NodeId, TuttiDriver, TuttiEngine, TuttiEngineBuilder
 // Entity-as-node ECS primitives — re-exported from `tutti` so apps don't
 // need to reach into `tutti::core::ecs` directly.
 pub use tutti::{AudioNode, Mute, NodeKind, Pan, PluginParam, Volume};
+#[cfg(feature = "dsp")]
+pub use tutti::{
+    Attack, CompressorRatio, DelayTime, Feedback, FilterQ, Frequency, GainDb, ModDepth, ModRate,
+    Release, ReverbDamping, ReverbRoomSize, ThresholdDb, WetMix,
+};
 #[cfg(feature = "sampler")]
 pub use tutti::{SamplerLooping, SamplerSpeed};
 pub use graph_reconcile::{

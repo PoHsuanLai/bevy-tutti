@@ -727,9 +727,9 @@ impl AddLfo {
 /// Trigger component: spawn an entity with this to add a stereo SVF filter.
 ///
 /// `dsp_filter_system` consumes `Added<AddFilter>`, builds a
-/// `StereoSvfFilterNode<f64>`, attaches `AudioNode + NodeKind::Filter`
-/// + `Frequency / FilterQ / GainDb` param components, and removes the
-/// trigger.
+/// `StereoSvfFilterNode<f64>`, attaches `AudioNode`, `NodeKind::Filter`,
+/// and the `Frequency` / `FilterQ` / `GainDb` param components, then
+/// removes the trigger.
 #[cfg(feature = "dsp")]
 #[derive(Component, Debug, Clone, Copy)]
 pub struct AddFilter {

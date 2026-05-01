@@ -301,7 +301,7 @@ pub fn reconcile_plugin_params(
 #[cfg(feature = "dsp")]
 use tutti::core::ecs::{
     Attack, CompressorRatio, DelayTime, Feedback, FilterQ, Frequency, GainDb, ModDepth, ModRate,
-    Release, ReverbDamping, ReverbRoomSize, ThresholdDb, WetMix,
+    Release, ThresholdDb, WetMix,
 };
 
 #[cfg(feature = "dsp")]
@@ -311,6 +311,7 @@ type FilterChangedFilter =
 /// Reconciles `Changed<Frequency>` / `Changed<FilterQ>` / `Changed<GainDb>`
 /// into a `StereoSvfFilterNode<f64>` for entities with [`NodeKind::Filter`].
 #[cfg(feature = "dsp")]
+#[allow(clippy::type_complexity, reason = "Bevy queries are tuple-shaped by design")]
 pub fn reconcile_filter_params(
     graph: Option<ResMut<TuttiGraphRes>>,
     changed: Query<
@@ -346,6 +347,7 @@ type DelayChangedFilter = Or<(Changed<DelayTime>, Changed<Feedback>, Changed<Wet
 /// Reconciles `Changed<DelayTime>` / `Changed<Feedback>` / `Changed<WetMix>`
 /// into a `StereoDelayLineNode` for entities with [`NodeKind::Delay`].
 #[cfg(feature = "dsp")]
+#[allow(clippy::type_complexity, reason = "Bevy queries are tuple-shaped by design")]
 pub fn reconcile_delay_params(
     graph: Option<ResMut<TuttiGraphRes>>,
     changed: Query<
@@ -384,6 +386,7 @@ type ChorusChangedFilter = Or<(
 /// Reconciles chorus params into a `ChorusNode` for entities with
 /// [`NodeKind::Chorus`].
 #[cfg(feature = "dsp")]
+#[allow(clippy::type_complexity, reason = "Bevy queries are tuple-shaped by design")]
 pub fn reconcile_chorus_params(
     graph: Option<ResMut<TuttiGraphRes>>,
     changed: Query<
@@ -433,6 +436,7 @@ type CompressorChangedFilter = Or<(
 /// Reconciles compressor params into a `Compressor` for entities with
 /// [`NodeKind::Compressor`].
 #[cfg(feature = "dsp")]
+#[allow(clippy::type_complexity, reason = "Bevy queries are tuple-shaped by design")]
 pub fn reconcile_compressor_params(
     graph: Option<ResMut<TuttiGraphRes>>,
     changed: Query<
@@ -482,6 +486,7 @@ type GateChangedFilter =
 /// [`NodeKind::Gate`]. Threshold / attack / release write through the
 /// gate's atomic accessors.
 #[cfg(feature = "dsp")]
+#[allow(clippy::type_complexity, reason = "Bevy queries are tuple-shaped by design")]
 pub fn reconcile_gate_params(
     graph: Option<ResMut<TuttiGraphRes>>,
     changed: Query<

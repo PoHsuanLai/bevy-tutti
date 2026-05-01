@@ -20,6 +20,13 @@
 
 use bevy_ecs::prelude::*;
 
+#[cfg(feature = "dsp")]
+use tutti::core::ecs::{
+    Attack, AudioNode, CompressorRatio, DelayTime, Feedback, FilterQ, Frequency, GainDb, ModDepth,
+    ModRate, NodeKind, Release, ReverbDamping, ReverbRoomSize, ThresholdDb, WetMix,
+};
+
+#[cfg(not(feature = "dsp"))]
 use tutti::core::ecs::{
     Attack, AudioNode, CompressorRatio, DelayTime, Feedback, FilterQ, Frequency, GainDb, ModDepth,
     ModRate, Mute, NodeKind, Pan, Release, ReverbDamping, ReverbRoomSize, ThresholdDb, Volume,
@@ -326,6 +333,10 @@ pub fn dsp_chorus_system(
 
 // Suppress unused-import warning when the dsp feature is off.
 #[cfg(not(feature = "dsp"))]
+#[allow(
+    clippy::too_many_arguments,
+    reason = "Sole purpose is to keep imports referenced when `dsp` is off."
+)]
 fn _unused_imports(
     _: AudioNode,
     _: NodeKind,
