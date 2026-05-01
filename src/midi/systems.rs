@@ -291,44 +291,125 @@ fn note_off_event(note: u8) -> tutti::midi::MidiEvent {
     tutti::midi::MidiEvent::note_off(0, 0, note, 0)
 }
 
-/// Placeholder MPE resource.
+/// Live per-note MPE expression state, wrapping an
+/// [`Arc<tutti::midi_runtime::PerNoteExpression>`] from a tutti-side
+/// [`MpeProcessor`].
 ///
-/// In the flat-bundle engine, MPE is wired into the `MidiProcessor`
-/// pipeline at build time via `TuttiEngineBuilder::mpe(mode)`; there is no
-/// external hook to read per-note expression back out yet. This resource
-/// exposes zeroed defaults so consumers compile against the same shape
-/// they used before, and will be replaced with a real `Arc<PerNoteExpression>`
-/// handle once the engine surfaces one.
+/// The Arc is lock-free and safe to read from any thread; the writer
+/// is the audio (or MIDI-input) thread feeding the `MpeProcessor`.
+/// When MPE is disabled or no processor has been wired yet, this
+/// resource is `Disabled` and the readers return defaults.
+///
+/// # Lifecycle
+///
+/// `mpe_setup_system` initialises this resource as `Disabled`. App
+/// code that owns an `MpeProcessor` calls
+/// [`MpeExpressionResource::set_expression`] with the processor's
+/// `Arc<PerNoteExpression>` to switch the resource into the `Live`
+/// variant. The processor itself is fed MIDI events by whoever owns
+/// it (audio thread, UI thread observer, etc.) — wiring an integrated
+/// engine-side feed is a follow-up; this resource only handles the
+/// *read* side.
 #[cfg(feature = "mpe")]
-#[derive(Resource, Default, Debug, Clone, Copy)]
-pub struct MpeExpressionResource;
+#[derive(Resource, Default, Clone)]
+pub struct MpeExpressionResource(Option<std::sync::Arc<tutti::midi_runtime::PerNoteExpression>>);
 
 #[cfg(feature = "mpe")]
-#[allow(dead_code)] // stub — real impl lands when the bundle exposes an MPE observer hook
+#[allow(
+    dead_code,
+    reason = "Public surface that callers (downstream apps) flip to live by passing \
+              an MpeProcessor's expression handle. No in-tree consumer yet."
+)]
 impl MpeExpressionResource {
-    pub fn pitch_bend(&self, _note: u8) -> f32 {
-        0.0
+    /// Construct from an existing processor's expression handle.
+    pub fn from_expression(expr: std::sync::Arc<tutti::midi_runtime::PerNoteExpression>) -> Self {
+        Self(Some(expr))
     }
 
-    pub fn pressure(&self, _note: u8) -> f32 {
-        0.0
+    /// Replace the expression backing. Pass `None` to disable.
+    pub fn set_expression(&mut self, expr: Option<std::sync::Arc<tutti::midi_runtime::PerNoteExpression>>) {
+        self.0 = expr;
     }
 
-    pub fn slide(&self, _note: u8) -> f32 {
-        0.5
+    /// Combined per-note + global pitch bend, -1.0..=1.0.
+    /// Returns 0.0 when no processor is wired.
+    pub fn pitch_bend(&self, note: u8) -> f32 {
+        self.0
+            .as_ref()
+            .map(|e| e.get_pitch_bend(note))
+            .unwrap_or(0.0)
     }
 
-    pub fn is_note_active(&self, _note: u8) -> bool {
-        false
+    /// max(per-note, global) pressure, 0.0..=1.0. Returns 0.0 when
+    /// no processor is wired.
+    pub fn pressure(&self, note: u8) -> f32 {
+        self.0
+            .as_ref()
+            .map(|e| e.get_pressure(note))
+            .unwrap_or(0.0)
     }
 
+    /// CC74 slide (timbre / brightness), 0.0..=1.0. Returns the CC74
+    /// rest position (0.5) when no processor is wired.
+    pub fn slide(&self, note: u8) -> f32 {
+        self.0.as_ref().map(|e| e.get_slide(note)).unwrap_or(0.5)
+    }
+
+    /// Whether the note is currently held. `false` when no processor
+    /// is wired.
+    pub fn is_note_active(&self, note: u8) -> bool {
+        self.0.as_ref().map(|e| e.is_active(note)).unwrap_or(false)
+    }
+
+    /// Whether a processor has been wired.
     pub fn is_enabled(&self) -> bool {
-        false
+        self.0.is_some()
+    }
+
+    /// Direct access to the underlying expression handle, if wired.
+    /// Useful for tests and for callers that want to share the Arc.
+    pub fn expression(&self) -> Option<std::sync::Arc<tutti::midi_runtime::PerNoteExpression>> {
+        self.0.clone()
     }
 }
 
-/// MPE setup is a stub pending engine-side observer plumbing.
+#[cfg(all(feature = "mpe", test))]
+mod mpe_tests {
+    use super::*;
+
+    #[test]
+    fn unwired_returns_defaults() {
+        let r = MpeExpressionResource::default();
+        assert_eq!(r.pitch_bend(60), 0.0);
+        assert_eq!(r.pressure(60), 0.0);
+        assert_eq!(r.slide(60), 0.5);
+        assert!(!r.is_note_active(60));
+        assert!(!r.is_enabled());
+    }
+
+    #[test]
+    fn wired_round_trips_expression() {
+        let expr = std::sync::Arc::new(tutti::midi_runtime::PerNoteExpression::new());
+        expr.note_on(60);
+        expr.set_pitch_bend(60, 0.5);
+        expr.set_pressure(60, 0.75);
+        expr.set_slide(60, 0.25);
+
+        let r = MpeExpressionResource::from_expression(expr);
+        assert!(r.is_enabled());
+        assert!(r.is_note_active(60));
+        assert!((r.pitch_bend(60) - 0.5).abs() < 1e-6);
+        assert!((r.pressure(60) - 0.75).abs() < 1e-6);
+        assert!((r.slide(60) - 0.25).abs() < 1e-6);
+    }
+}
+
+/// Initialise [`MpeExpressionResource`] in its disabled state. App code
+/// that owns an `MpeProcessor` (or any `Arc<PerNoteExpression>`) flips
+/// the resource to live by calling
+/// [`MpeExpressionResource::set_expression`] from a startup or
+/// reload-time system.
 #[cfg(feature = "mpe")]
 pub(crate) fn mpe_setup_system(mut commands: Commands) {
-    commands.insert_resource(MpeExpressionResource);
+    commands.insert_resource(MpeExpressionResource::default());
 }
