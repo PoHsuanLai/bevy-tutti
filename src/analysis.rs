@@ -1,8 +1,23 @@
+//! Live analysis (pitch, transients, waveform, spectrum) mirror as a Bevy resource.
+
 use std::sync::Arc;
 
+use bevy_app::{App, Plugin, Update};
 use bevy_ecs::prelude::*;
 
-use crate::AnalysisRes;
+use crate::resources::AnalysisRes;
+
+/// Trigger component: spawn an entity with this to enable live analysis.
+///
+/// Processed by `live_analysis_control_system`, calls `engine.enable_live_analysis()`.
+#[derive(Component)]
+pub struct EnableLiveAnalysis;
+
+/// Trigger component: spawn an entity with this to disable live analysis.
+///
+/// Processed by `live_analysis_control_system`, calls `engine.disable_live_analysis()`.
+#[derive(Component)]
+pub struct DisableLiveAnalysis;
 
 /// Live analysis state synced from Tutti via lock-free ArcSwap reads.
 ///
@@ -32,8 +47,8 @@ pub fn live_analysis_control_system(
     mut commands: Commands,
     analysis: Option<Res<AnalysisRes>>,
     mut data: ResMut<LiveAnalysisData>,
-    enable_query: Query<Entity, Added<crate::components::EnableLiveAnalysis>>,
-    disable_query: Query<Entity, Added<crate::components::DisableLiveAnalysis>>,
+    enable_query: Query<Entity, Added<EnableLiveAnalysis>>,
+    disable_query: Query<Entity, Added<DisableLiveAnalysis>>,
 ) {
     // The new flat-bundle AnalysisHandle does not yet expose a runtime
     // enable/disable toggle (it's a constructor-time choice via `with_live`).
@@ -51,17 +66,13 @@ pub fn live_analysis_control_system(
             );
         }
         data.is_live = true;
-        commands
-            .entity(entity)
-            .remove::<crate::components::EnableLiveAnalysis>();
+        commands.entity(entity).remove::<EnableLiveAnalysis>();
         bevy_log::info!("Live analysis enabled");
     }
 
     for entity in disable_query.iter() {
         data.is_live = false;
-        commands
-            .entity(entity)
-            .remove::<crate::components::DisableLiveAnalysis>();
+        commands.entity(entity).remove::<DisableLiveAnalysis>();
         bevy_log::info!("Live analysis disabled");
     }
 }
@@ -79,4 +90,16 @@ pub fn live_analysis_sync_system(
     data.transients = analysis.live_transients();
     data.waveform = analysis.live_waveform();
     data.spectrum = analysis.live_spectrum();
+}
+
+/// Bevy plugin: live analysis enable/disable + per-frame pull.
+pub struct TuttiAnalysisPlugin;
+
+impl Plugin for TuttiAnalysisPlugin {
+    fn build(&self, app: &mut App) {
+        app.init_resource::<LiveAnalysisData>().add_systems(
+            Update,
+            (live_analysis_control_system, live_analysis_sync_system),
+        );
+    }
 }

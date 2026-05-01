@@ -1,6 +1,6 @@
 //! Deferred sampler load — bridges `bevy_asset` and entity-as-node.
 //!
-//! [`PlayAudio`](crate::components::PlayAudio) is a one-shot lifecycle
+//! [`PlayAudio`](crate::playback::PlayAudio) is a one-shot lifecycle
 //! trigger: it spawns a sampler node, pipes it to output, and (optionally)
 //! cleans up when the wave finishes. That's the right shape for fire-and-
 //! forget SFX, but a DAW track wants a long-lived entity-as-node — one
@@ -31,8 +31,8 @@ use tutti::core::WaveAsset;
 use tutti::sampler::file::ImportHandle;
 use tutti::sampler::SamplerUnit;
 
-use crate::graph_reconcile::GraphDirty;
-use crate::TuttiGraphRes;
+use super::reconcile::GraphDirty;
+use crate::resources::TuttiGraphRes;
 
 /// "When this asset is loaded, build a `SamplerUnit` and add it to the graph."
 ///

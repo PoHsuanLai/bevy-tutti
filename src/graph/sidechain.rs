@@ -20,8 +20,8 @@ use bevy_ecs::prelude::*;
 
 use tutti::core::ecs::AudioNode;
 
-use crate::graph_reconcile::GraphDirty;
-use crate::TuttiGraphRes;
+use super::reconcile::GraphDirty;
+use crate::resources::TuttiGraphRes;
 
 /// "This entity's audio drives `0`'s sidechain input (port 1)."
 ///
@@ -138,7 +138,7 @@ pub fn reconcile_sidechain_links(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::graph_reconcile::GraphReconcileSet;
+    use crate::graph::reconcile::GraphReconcileSet;
     use bevy_app::App;
     use tutti::TuttiEngine;
 
@@ -147,7 +147,7 @@ mod tests {
         let TuttiEngine { graph, .. } = engine;
 
         let mut app = App::new();
-        app.insert_resource(crate::TuttiGraphRes(graph));
+        app.insert_resource(crate::resources::TuttiGraphRes(graph));
         app.init_resource::<GraphDirty>();
         app.configure_sets(
             bevy_app::Update,

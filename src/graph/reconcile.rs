@@ -20,7 +20,7 @@ use bevy_ecs::system::EntityCommands;
 use tutti::core::ecs::{AudioNode, Mute, NodeKind, Volume};
 use tutti::dsp::AudioUnit;
 
-use crate::TuttiGraphRes;
+use crate::resources::TuttiGraphRes;
 
 #[cfg(feature = "sampler")]
 use tutti::core::ecs::{SamplerLooping, SamplerSpeed};
@@ -30,7 +30,7 @@ use tutti::sampler::SamplerUnit;
 #[cfg(feature = "plugin")]
 use tutti::core::ecs::PluginParam;
 #[cfg(feature = "plugin")]
-use crate::components::PluginEmitter;
+use crate::plugin_host::PluginEmitter;
 
 /// System-set ordering anchor for the reconcile pipeline.
 ///
@@ -553,7 +553,7 @@ mod tests {
         let TuttiEngine { graph, .. } = engine;
 
         let mut app = App::new();
-        app.insert_resource(crate::TuttiGraphRes(graph));
+        app.insert_resource(crate::resources::TuttiGraphRes(graph));
         app.init_resource::<GraphDirty>();
         app.add_systems(
             bevy_app::Update,
@@ -591,7 +591,7 @@ mod tests {
             count += 1;
             assert_eq!(*kind, NodeKind::Generator);
             assert_eq!(vol.0, 0.5);
-            assert!(app.world().resource::<crate::TuttiGraphRes>().0.contains(node.0));
+            assert!(app.world().resource::<crate::resources::TuttiGraphRes>().0.contains(node.0));
         }
         assert_eq!(count, 1);
     }
@@ -606,12 +606,12 @@ mod tests {
         app.update();
 
         let node_id = app.world().get::<AudioNode>(entity).expect("AudioNode").0;
-        assert!(app.world().resource::<crate::TuttiGraphRes>().0.contains(node_id));
+        assert!(app.world().resource::<crate::resources::TuttiGraphRes>().0.contains(node_id));
 
         app.world_mut().despawn(entity);
         app.update();
 
-        assert!(!app.world().resource::<crate::TuttiGraphRes>().0.contains(node_id));
+        assert!(!app.world().resource::<crate::resources::TuttiGraphRes>().0.contains(node_id));
     }
 
     #[test]
@@ -633,7 +633,7 @@ mod tests {
         app.update();
 
         let node_id_before = app.world().get::<AudioNode>(entity).expect("AudioNode").0;
-        assert!(app.world().resource::<crate::TuttiGraphRes>().0.contains(node_id_before));
+        assert!(app.world().resource::<crate::resources::TuttiGraphRes>().0.contains(node_id_before));
 
         // Replace with a different oscillator — same NodeId, new unit.
         {
@@ -645,7 +645,7 @@ mod tests {
         // Same NodeId stays — that's the contract of crossfade.
         let node_id_after = app.world().get::<AudioNode>(entity).expect("AudioNode").0;
         assert_eq!(node_id_before, node_id_after);
-        assert!(app.world().resource::<crate::TuttiGraphRes>().0.contains(node_id_after));
+        assert!(app.world().resource::<crate::resources::TuttiGraphRes>().0.contains(node_id_after));
     }
 
     #[test]
@@ -688,7 +688,7 @@ mod tests {
         app.update();
 
         let node_id = app.world().get::<AudioNode>(entity).expect("AudioNode").0;
-        let mut graph = app.world_mut().resource_mut::<crate::TuttiGraphRes>();
+        let mut graph = app.world_mut().resource_mut::<crate::resources::TuttiGraphRes>();
         let unit = graph.0.node_mut::<SamplerUnit>(node_id).expect("SamplerUnit");
         assert_eq!(unit.speed(), 2.0);
         assert!(unit.is_looping());

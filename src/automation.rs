@@ -1,31 +1,67 @@
-//! ECS binding for [`tutti::automation::AutomationLane`].
+//! Automation: trigger spawn + ECS binding for tutti's `AutomationLane`.
 //!
-//! Tutti's `AutomationLane` is an `AudioUnit` — a graph node whose output
-//! is the current envelope value at the transport's beat position. This
-//! module exposes two ergonomic component types on top of that:
+//! Tutti's `AutomationLane` is an `AudioUnit` whose output is the current
+//! envelope value at the transport's beat position. This module exposes:
 //!
-//! - [`AutomationLaneNode`] — marker for the entity that owns the lane node.
-//! - [`AutomationDrivesParam`] — a small relationship-style component that
-//!   says "feed the lane's current value into this *target* entity's
-//!   `Volume` / `Pan` / `PluginParam`."
-//!
-//! The reconcile system [`reconcile_automation_writes`] runs in
-//! [`GraphReconcileSet::Params`]: each frame it walks every entity that
-//! has both an [`AudioNode`] and an [`AutomationDrivesParam`], peeks at the
-//! lane's current `last_value()` via `graph.node::<LiveAutomationLane<f32>>`,
-//! and writes that value into the target entity's parameter component.
-//!
-//! Why this stays inside bevy-tutti: tutti already exposes `AutomationLane`
-//! and `last_value()`. We're not re-implementing automation semantics —
-//! we're binding the *output* of an existing graph node into Bevy's change
-//! detection so the rest of the reconcile pipeline picks it up.
+//! - [`AddAutomationLane`] — trigger to spawn a lane node from an envelope.
+//! - [`AutomationLaneEmitter`] — marker for entities owning a lane node.
+//! - [`AutomationLaneNode`] — marker for entities holding a typed lane.
+//! - [`AutomationDrivesParam`] — relationship: "this lane drives a param on `target`."
+//! - [`reconcile_automation_writes`] — runs in `GraphReconcileSet::Params`
+//!   and writes lane values into target entities' parameter components.
 
+use bevy_app::{App, Plugin, Update};
 use bevy_ecs::prelude::*;
 
 use tutti::automation::LiveAutomationLane;
 use tutti::core::ecs::{AudioNode, PluginParam, Volume};
 
-use crate::TuttiGraphRes;
+use crate::graph::reconcile::{reconcile_params, GraphReconcileSet};
+use crate::resources::{TransportRes, TuttiGraphRes};
+
+/// Trigger component: spawn an entity with this to create an automation lane.
+///
+/// The `automation_lane_system` processes entities with `Added<AddAutomationLane>`,
+/// calls `engine.automation_lane(envelope)`, adds the lane to the graph, and
+/// replaces this component with `AutomationLaneEmitter`.
+///
+/// # Examples
+///
+/// ```rust,ignore
+/// use tutti::{AutomationEnvelope, AutomationPoint, CurveType};
+///
+/// let envelope = AutomationEnvelope::new("volume")
+///     .with_point(AutomationPoint::new(0.0, 0.0))
+///     .with_point(AutomationPoint::with_curve(4.0, 1.0, CurveType::SCurve));
+///
+/// commands.spawn(AddAutomationLane { envelope });
+/// ```
+#[derive(Component)]
+pub struct AddAutomationLane {
+    pub envelope: tutti::automation::AutomationEnvelope<String>,
+}
+
+impl AddAutomationLane {
+    pub fn new(target: impl Into<String>) -> Self {
+        Self {
+            envelope: tutti::automation::AutomationEnvelope::new(target.into()),
+        }
+    }
+
+    pub fn with_envelope(envelope: tutti::automation::AutomationEnvelope<String>) -> Self {
+        Self { envelope }
+    }
+}
+
+/// Marks an entity as having an automation lane in the graph.
+///
+/// Added automatically by `automation_lane_system`. Use `node_id` to
+/// connect the lane's output to other graph nodes (e.g., a multiply node
+/// for volume automation).
+#[derive(Component)]
+pub struct AutomationLaneEmitter {
+    pub node_id: tutti::NodeId,
+}
 
 /// Marker component for entities holding a `LiveAutomationLane<f32>` node.
 ///
@@ -66,10 +102,39 @@ pub struct AutomationDrivesParam {
     pub param: AutomationParam,
 }
 
+pub fn automation_lane_system(
+    mut commands: Commands,
+    graph: Option<ResMut<TuttiGraphRes>>,
+    transport: Option<Res<TransportRes>>,
+    query: Query<(Entity, &AddAutomationLane), Added<AddAutomationLane>>,
+) {
+    let Some(mut graph) = graph else { return };
+    let Some(transport) = transport else { return };
+
+    let mut edited = false;
+
+    for (entity, add) in query.iter() {
+        let lane = tutti::automation::AutomationLane::new(add.envelope.clone(), transport.0.clone());
+        let node_id = graph.0.add(lane);
+        edited = true;
+
+        commands
+            .entity(entity)
+            .remove::<AddAutomationLane>()
+            .insert(AutomationLaneEmitter { node_id });
+
+        bevy_log::info!("Automation lane added (entity {entity:?}, node {node_id:?})");
+    }
+
+    if edited {
+        graph.0.commit();
+    }
+}
+
 /// Reads each automation lane's current value and writes it into the
 /// target entity's parameter component.
 ///
-/// Runs in [`crate::GraphReconcileSet::Params`]. The downstream parameter
+/// Runs in [`GraphReconcileSet::Params`]. The downstream parameter
 /// reconcilers (`reconcile_params`, `reconcile_plugin_params`, …) pick up
 /// the resulting `Changed<Volume>` / `Changed<PluginParam>` later in the
 /// same set and route it to the audio thread.
@@ -117,5 +182,19 @@ pub fn reconcile_automation_writes(
                 }
             }
         }
+    }
+}
+
+/// Bevy plugin: automation lane spawn + parameter binding.
+pub struct TuttiAutomationPlugin;
+
+impl Plugin for TuttiAutomationPlugin {
+    fn build(&self, app: &mut App) {
+        app.add_systems(Update, automation_lane_system).add_systems(
+            Update,
+            reconcile_automation_writes
+                .in_set(GraphReconcileSet::Params)
+                .before(reconcile_params),
+        );
     }
 }

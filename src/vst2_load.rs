@@ -22,9 +22,9 @@ use bevy_ecs::prelude::*;
 
 use tutti::core::ecs::{AudioNode, NodeKind};
 
-use crate::components::{OpenPluginEditor, PluginEmitter};
-use crate::graph_reconcile::GraphDirty;
-use crate::{PluginEditorMainThread, TuttiGraphRes};
+use crate::graph::reconcile::GraphDirty;
+use crate::plugin_host::{OpenPluginEditor, PluginEmitter};
+use crate::resources::{PluginEditorMainThread, TuttiGraphRes};
 
 /// "Build a VST2 plugin from `path` on the main thread."
 ///

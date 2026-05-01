@@ -1,21 +1,63 @@
+//! Audio input device selection + monitoring + peak-level mirror.
+
+use bevy_app::{App, Plugin, Startup, Update};
 use bevy_ecs::prelude::*;
 
-use crate::SamplerRes;
+use crate::resources::SamplerRes;
+
+/// Trigger component: spawn an entity with this to enable audio input capture.
+///
+/// Processed by `audio_input_control_system`. Selects device, sets gain/monitoring,
+/// and requests capture start.
+#[derive(Component)]
+pub struct EnableAudioInput {
+    pub device_index: Option<usize>,
+    pub monitoring: bool,
+    pub gain: f32,
+}
+
+impl Default for EnableAudioInput {
+    fn default() -> Self {
+        Self {
+            device_index: None,
+            monitoring: false,
+            gain: 1.0,
+        }
+    }
+}
+
+impl EnableAudioInput {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn device(mut self, index: usize) -> Self {
+        self.device_index = Some(index);
+        self
+    }
+
+    pub fn monitoring(mut self, enabled: bool) -> Self {
+        self.monitoring = enabled;
+        self
+    }
+
+    pub fn gain(mut self, gain: f32) -> Self {
+        self.gain = gain;
+        self
+    }
+}
+
+/// Trigger component: spawn an entity with this to disable audio input capture.
+///
+/// Processed by `audio_input_control_system`. Stops capture and disables monitoring.
+#[derive(Component)]
+pub struct DisableAudioInput;
 
 /// Audio input state synced from Tutti's sampler subsystem every frame.
-#[derive(Resource)]
+#[derive(Resource, Default)]
 pub struct AudioInputState {
     pub peak_level: f32,
     pub devices: Vec<AudioInputDeviceInfo>,
-}
-
-impl Default for AudioInputState {
-    fn default() -> Self {
-        Self {
-            peak_level: 0.0,
-            devices: Vec::new(),
-        }
-    }
 }
 
 #[derive(Debug, Clone)]
@@ -27,11 +69,8 @@ pub struct AudioInputDeviceInfo {
 pub fn audio_input_control_system(
     mut commands: Commands,
     sampler: Option<Res<SamplerRes>>,
-    enable_query: Query<
-        (Entity, &crate::components::EnableAudioInput),
-        Added<crate::components::EnableAudioInput>,
-    >,
-    disable_query: Query<Entity, Added<crate::components::DisableAudioInput>>,
+    enable_query: Query<(Entity, &EnableAudioInput), Added<EnableAudioInput>>,
+    disable_query: Query<Entity, Added<DisableAudioInput>>,
 ) {
     let Some(sampler) = sampler else { return };
     let input = sampler.0.audio_input();
@@ -50,9 +89,7 @@ pub fn audio_input_control_system(
         input.set_gain(enable.gain);
         input.set_monitoring(enable.monitoring);
 
-        commands
-            .entity(entity)
-            .remove::<crate::components::EnableAudioInput>();
+        commands.entity(entity).remove::<EnableAudioInput>();
         bevy_log::info!(
             "Audio input configured (device={:?}, gain={}, monitoring={})",
             enable.device_index,
@@ -64,9 +101,7 @@ pub fn audio_input_control_system(
     for entity in disable_query.iter() {
         input.set_monitoring(false);
 
-        commands
-            .entity(entity)
-            .remove::<crate::components::DisableAudioInput>();
+        commands.entity(entity).remove::<DisableAudioInput>();
         bevy_log::info!("Audio input monitoring disabled");
     }
 }
@@ -93,4 +128,18 @@ pub fn audio_input_init_system(
             name: d.name,
         })
         .collect();
+}
+
+/// Bevy plugin: audio input device control + peak-level sync.
+pub struct TuttiAudioInputPlugin;
+
+impl Plugin for TuttiAudioInputPlugin {
+    fn build(&self, app: &mut App) {
+        app.init_resource::<AudioInputState>()
+            .add_systems(Startup, audio_input_init_system)
+            .add_systems(
+                Update,
+                (audio_input_control_system, audio_input_sync_system),
+            );
+    }
 }

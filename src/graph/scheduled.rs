@@ -24,7 +24,7 @@ use bevy_ecs::prelude::*;
 use tutti::core::MidiUnitId;
 use tutti::midi::MidiEvent;
 
-use crate::MidiBusRes;
+use crate::resources::MidiBusRes;
 
 /// "This entity owns the audio-graph node whose MIDI sink id is `midi_unit_id`."
 ///

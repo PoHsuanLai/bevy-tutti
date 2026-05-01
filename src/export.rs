@@ -1,6 +1,55 @@
+//! Offline graph export: `StartExport` trigger → file via tutti's exporter.
+
+use bevy_app::{App, Plugin, Update};
 use bevy_ecs::prelude::*;
 
-use crate::{AudioConfig, TuttiGraphRes};
+use crate::resources::{AudioConfig, TuttiGraphRes};
+
+/// Trigger component: spawn an entity with this to start an offline export.
+///
+/// The `export_start_system` processes entities with `Added<StartExport>`,
+/// builds a `GraphExport`, calls `.to_file(path).spawn()`, and replaces
+/// this component with `ExportInProgress`.
+#[derive(Component)]
+pub struct StartExport {
+    pub path: std::path::PathBuf,
+    pub duration_seconds: Option<f64>,
+    pub duration_beats: Option<(f64, f64)>,
+    pub format: Option<tutti::export::AudioFormat>,
+    pub normalization: Option<tutti::export::Normalize>,
+}
+
+impl StartExport {
+    pub fn new(path: impl Into<std::path::PathBuf>) -> Self {
+        Self {
+            path: path.into(),
+            duration_seconds: None,
+            duration_beats: None,
+            format: None,
+            normalization: None,
+        }
+    }
+
+    pub fn duration_seconds(mut self, seconds: f64) -> Self {
+        self.duration_seconds = Some(seconds);
+        self
+    }
+
+    pub fn duration_beats(mut self, beats: f64, tempo: f64) -> Self {
+        self.duration_beats = Some((beats, tempo));
+        self
+    }
+
+    pub fn format(mut self, format: tutti::export::AudioFormat) -> Self {
+        self.format = Some(format);
+        self
+    }
+
+    pub fn normalization(mut self, mode: tutti::export::Normalize) -> Self {
+        self.normalization = Some(mode);
+        self
+    }
+}
 
 #[derive(Component)]
 pub struct ExportInProgress {
@@ -19,7 +68,7 @@ pub fn export_start_system(
     mut commands: Commands,
     graph: Option<Res<TuttiGraphRes>>,
     config: Option<Res<AudioConfig>>,
-    query: Query<(Entity, &crate::components::StartExport), Added<crate::components::StartExport>>,
+    query: Query<(Entity, &StartExport), Added<StartExport>>,
 ) {
     let Some(graph) = graph else { return };
     let Some(config) = config else { return };
@@ -47,7 +96,7 @@ pub fn export_start_system(
 
         commands
             .entity(entity)
-            .remove::<crate::components::StartExport>()
+            .remove::<StartExport>()
             .insert(ExportInProgress { handle });
     }
 }
@@ -76,5 +125,14 @@ pub fn export_poll_system(
             }
             tutti::export::State::Running { .. } | tutti::export::State::Pending => {}
         }
+    }
+}
+
+/// Bevy plugin: offline graph export.
+pub struct TuttiExportPlugin;
+
+impl Plugin for TuttiExportPlugin {
+    fn build(&self, app: &mut App) {
+        app.add_systems(Update, (export_start_system, export_poll_system));
     }
 }
