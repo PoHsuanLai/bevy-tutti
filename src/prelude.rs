@@ -48,7 +48,7 @@ pub use crate::midi::systems::{midi_device_connect_system, midi_device_poll_syst
 #[cfg(feature = "mpe")]
 pub use crate::midi::components::MpeReceiver;
 #[cfg(feature = "mpe")]
-pub use crate::midi::systems::MpeExpressionResource;
+pub use crate::midi::systems::{MpeExpressionResource, MpeModeConfig};
 #[cfg(feature = "mpe")]
 pub use tutti::midi::{MpeMode, MpeZone, MpeZoneConfig};
 

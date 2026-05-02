@@ -402,14 +402,103 @@ mod mpe_tests {
         assert!((r.pressure(60) - 0.75).abs() < 1e-6);
         assert!((r.slide(60) - 0.25).abs() < 1e-6);
     }
+
+    #[test]
+    fn mpe_setup_with_mode_installs_processor_on_bus() {
+        // End-to-end: MidiBusRes + MpeModeConfig present at startup.
+        // The setup system installs the processor on the bus and the
+        // resource exposes the live PerNoteExpression. Queueing a
+        // note-on through the bus updates the resource's read.
+        use bevy_ecs::prelude::*;
+        use tutti::midi::{MidiEvent, MpeMode, MpeZoneConfig};
+        use tutti::midi_runtime::MidiBus;
+        use tutti::core::MidiUnitId;
+
+        let mut world = World::new();
+        let bus = MidiBus::new();
+        world.insert_resource(crate::resources::MidiBusRes(bus.clone()));
+        world.insert_resource(MpeModeConfig(MpeMode::LowerZone(MpeZoneConfig::lower(15))));
+
+        let mut schedule = Schedule::default();
+        schedule.add_systems(mpe_setup_system);
+        schedule.run(&mut world);
+
+        let r = world.resource::<MpeExpressionResource>();
+        assert!(r.is_enabled(), "setup should install live expression");
+
+        // Subscribe a unit so the bus has somewhere to deliver to.
+        let id = MidiUnitId::new(1);
+        let (sender, _recv) = tutti::midi_runtime::MidiEventSlot::pair(id);
+        bus.insert(sender);
+
+        let note_on = MidiEvent::note_on(0, 2, 60, 100u16 << 9);
+        bus.queue(id, &[note_on]);
+
+        assert!(r.is_note_active(60), "note 60 should be active after queue");
+    }
+
+    #[test]
+    fn mpe_setup_disabled_mode_inserts_default_resource() {
+        use bevy_ecs::prelude::*;
+        use tutti::midi::MpeMode;
+        use tutti::midi_runtime::MidiBus;
+
+        let mut world = World::new();
+        world.insert_resource(crate::resources::MidiBusRes(MidiBus::new()));
+        world.insert_resource(MpeModeConfig(MpeMode::Disabled));
+
+        let mut schedule = Schedule::default();
+        schedule.add_systems(mpe_setup_system);
+        schedule.run(&mut world);
+
+        let r = world.resource::<MpeExpressionResource>();
+        assert!(!r.is_enabled(), "Disabled mode → resource is disabled");
+    }
 }
 
-/// Initialise [`MpeExpressionResource`] in its disabled state. App code
-/// that owns an `MpeProcessor` (or any `Arc<PerNoteExpression>`) flips
-/// the resource to live by calling
-/// [`MpeExpressionResource::set_expression`] from a startup or
-/// reload-time system.
+/// Configures the MPE mode that [`mpe_setup_system`] installs at
+/// startup. Insert this *before* `TuttiPlugin` runs to override the
+/// default. Default is [`MpeMode::Disabled`] — apps that want MPE
+/// installation flip this to `LowerZone` / `UpperZone` / `DualZone`.
 #[cfg(feature = "mpe")]
-pub(crate) fn mpe_setup_system(mut commands: Commands) {
-    commands.insert_resource(MpeExpressionResource::default());
+#[derive(bevy_ecs::resource::Resource, Debug, Clone)]
+pub struct MpeModeConfig(pub tutti::midi::MpeMode);
+
+#[cfg(feature = "mpe")]
+impl Default for MpeModeConfig {
+    fn default() -> Self {
+        Self(tutti::midi::MpeMode::Disabled)
+    }
+}
+
+/// Initialise [`MpeExpressionResource`].
+///
+/// If [`MpeModeConfig`] is set to anything other than `Disabled` and
+/// a [`MidiBusRes`](crate::resources::MidiBusRes) is present, install an
+/// [`MpeProcessor`](tutti::midi_runtime::MpeProcessor) on the bus and
+/// hand its `Arc<PerNoteExpression>` to the resource. Otherwise
+/// inserts the resource in disabled state — `MpeExpressionResource`
+/// then returns defaults from every reader.
+#[cfg(feature = "mpe")]
+pub(crate) fn mpe_setup_system(mut commands: Commands, world: &World) {
+    use tutti::midi_runtime::MpeProcessor;
+
+    let mode = world
+        .get_resource::<MpeModeConfig>()
+        .map(|c| c.0.clone())
+        .unwrap_or(tutti::midi::MpeMode::Disabled);
+
+    if matches!(mode, tutti::midi::MpeMode::Disabled) {
+        commands.insert_resource(MpeExpressionResource::default());
+        return;
+    }
+
+    let Some(bus) = world.get_resource::<crate::resources::MidiBusRes>() else {
+        commands.insert_resource(MpeExpressionResource::default());
+        return;
+    };
+
+    let processor = MpeProcessor::new(mode);
+    let expression = bus.0.install_mpe(processor);
+    commands.insert_resource(MpeExpressionResource::from_expression(expression));
 }
