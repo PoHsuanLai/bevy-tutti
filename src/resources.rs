@@ -131,3 +131,21 @@ pub struct NeuralRes(pub Arc<NeuralEngine>);
 /// `NonSend<PluginEditorMainThread>` is pinned to the main thread.
 #[cfg(feature = "plugin")]
 pub struct PluginEditorMainThread;
+
+/// The plugin discovery + loading catalog. Owns the on-disk DB and the
+/// scan-dir config; systems reach in to `register_bundled_plugin`,
+/// `unregister_bundled_plugins`, `rescan`, etc.
+///
+/// Wrapped in a `Mutex` because `Plugins` carries a `Box<dyn PluginCatalog>`
+/// which is `Send` but not `Sync`. Operations on it are infrequent
+/// (extension activation, catalog rescan) so the lock is cheap.
+#[cfg(feature = "plugin")]
+#[derive(Resource)]
+pub struct PluginsRes(pub std::sync::Mutex<tutti::plugin::catalog::Plugins>);
+
+#[cfg(feature = "plugin")]
+impl PluginsRes {
+    pub fn new(plugins: tutti::plugin::catalog::Plugins) -> Self {
+        Self(std::sync::Mutex::new(plugins))
+    }
+}

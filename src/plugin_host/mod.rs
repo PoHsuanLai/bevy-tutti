@@ -19,10 +19,16 @@ pub use editor::{
     PluginEditorOpen, PluginEmitter,
 };
 
-/// Bevy plugin: plugin editor lifecycle + crash detection.
+/// Bevy plugin: plugin editor lifecycle + crash detection + plugin
+/// catalog resource.
 ///
-/// Inserts the [`crate::resources::PluginEditorMainThread`] non-send marker
-/// to pin editor systems to the main thread (required by AppKit / Win32 / X11).
+/// Inserts:
+/// - [`crate::resources::PluginEditorMainThread`] non-send marker to pin
+///   editor systems to the main thread (AppKit / Win32 / X11).
+/// - [`crate::resources::PluginsRes`] containing an empty in-memory
+///   plugin catalog (no scan dirs configured by default — apps that
+///   want disk-backed scanning should override the resource at startup
+///   with a `Plugins::with_config(...).with_fresh_scan()`).
 pub struct TuttiHostingPlugin;
 
 impl Plugin for TuttiHostingPlugin {
@@ -32,6 +38,15 @@ impl Plugin for TuttiHostingPlugin {
         }
 
         app.insert_non_send_resource(crate::resources::PluginEditorMainThread);
+
+        // Default plugin catalog: empty in-memory, no scan dirs. Apps
+        // that want a real disk-backed catalog should overwrite this
+        // resource with their own `PluginsRes::new(Plugins::with_config(...))`
+        // after `add_plugins(TuttiHostingPlugin)`.
+        let default_db_path = std::path::PathBuf::from(".dawai-plugins.json");
+        let config = tutti::plugin::catalog::PluginsConfig::new(default_db_path, Vec::new());
+        let plugins = tutti::plugin::catalog::Plugins::empty(config);
+        app.insert_resource(crate::resources::PluginsRes::new(plugins));
 
         app.add_systems(
             Update,

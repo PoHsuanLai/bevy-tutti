@@ -207,3 +207,5 @@ pub use crate::resources::AnalysisRes;
 pub use crate::resources::NeuralRes;
 #[cfg(feature = "plugin")]
 pub use crate::resources::PluginEditorMainThread;
+#[cfg(feature = "plugin")]
+pub use crate::resources::PluginsRes;
