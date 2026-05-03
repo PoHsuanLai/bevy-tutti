@@ -34,7 +34,7 @@ pub(crate) struct MidiObserverSender {
 #[cfg(feature = "midi-hardware")]
 #[derive(Resource, Default)]
 pub struct MidiDeviceState {
-    pub(crate) connected: Option<String>,
+    pub(crate) connected: std::collections::HashSet<String>,
     pub(crate) last_check: Option<std::time::Instant>,
 }
 
@@ -124,7 +124,7 @@ pub fn midi_device_connect_system(
     mut commands: Commands,
     midi_io: Option<Res<crate::MidiIoRes>>,
     connect_query: Query<(Entity, &ConnectMidiDevice), Added<ConnectMidiDevice>>,
-    disconnect_query: Query<Entity, Added<DisconnectMidiDevice>>,
+    disconnect_query: Query<(Entity, &DisconnectMidiDevice), Added<DisconnectMidiDevice>>,
     mut device_events: MessageWriter<MidiDeviceEvent>,
     mut state: ResMut<MidiDeviceState>,
 ) {
@@ -133,10 +133,11 @@ pub fn midi_device_connect_system(
     for (entity, connect) in connect_query.iter() {
         match midi_io.0.connect_input_by_name(&connect.name) {
             Ok(()) => {
-                state.connected = Some(connect.name.clone());
-                device_events.write(MidiDeviceEvent::Connected {
-                    name: connect.name.clone(),
-                });
+                if state.connected.insert(connect.name.clone()) {
+                    device_events.write(MidiDeviceEvent::Connected {
+                        name: connect.name.clone(),
+                    });
+                }
             }
             Err(e) => {
                 warn!("Failed to connect MIDI device '{}': {}", connect.name, e);
@@ -145,17 +146,20 @@ pub fn midi_device_connect_system(
         commands.entity(entity).remove::<ConnectMidiDevice>();
     }
 
-    for entity in disconnect_query.iter() {
-        midi_io.0.disconnect_input();
-        if state.connected.is_some() {
-            state.connected = None;
-            device_events.write(MidiDeviceEvent::Disconnected);
+    for (entity, disconnect) in disconnect_query.iter() {
+        midi_io.0.disconnect_input(&disconnect.name);
+        if state.connected.remove(&disconnect.name) {
+            device_events.write(MidiDeviceEvent::Disconnected {
+                name: disconnect.name.clone(),
+            });
         }
         commands.entity(entity).remove::<DisconnectMidiDevice>();
     }
 }
 
-/// Polls every 2s; fires `MidiDeviceEvent::Disconnected` if device disappears.
+/// Polls every 2s; emits `MidiDeviceEvent::Disconnected` for each device that
+/// vanished and `Connected` for any new device that appeared (e.g., a hot-plug
+/// or an external connection through another part of the app).
 #[cfg(feature = "midi-hardware")]
 pub fn midi_device_poll_system(
     midi_io: Option<Res<crate::MidiIoRes>>,
@@ -172,13 +176,16 @@ pub fn midi_device_poll_system(
     }
     state.last_check = Some(now);
 
-    let currently_connected = midi_io.0.input_device_name();
+    let live: std::collections::HashSet<String> =
+        midi_io.0.connected_input_names().into_iter().collect();
 
-    if state.connected.is_some() && currently_connected.is_none() {
-        state.connected = None;
-        device_events.write(MidiDeviceEvent::Disconnected);
-    } else if let Some(name) = &currently_connected {
-        state.connected = Some(name.clone());
+    for name in state.connected.difference(&live).cloned().collect::<Vec<_>>() {
+        state.connected.remove(&name);
+        device_events.write(MidiDeviceEvent::Disconnected { name });
+    }
+    for name in live.difference(&state.connected).cloned().collect::<Vec<_>>() {
+        state.connected.insert(name.clone());
+        device_events.write(MidiDeviceEvent::Connected { name });
     }
 }
 

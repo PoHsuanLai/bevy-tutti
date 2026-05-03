@@ -43,10 +43,12 @@ pub struct ConnectMidiDevice {
     pub name: String,
 }
 
-/// One-shot trigger: disconnect from the current MIDI input device.
+/// One-shot trigger: disconnect a specific MIDI input device by name.
 #[cfg(feature = "midi-hardware")]
 #[derive(Component)]
-pub struct DisconnectMidiDevice;
+pub struct DisconnectMidiDevice {
+    pub name: String,
+}
 
 /// Unlike `MidiReceiver`, routes all MIDI channels to one synth via
 /// `table.fallback()` (standard MPE pattern).

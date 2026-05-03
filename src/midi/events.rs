@@ -45,5 +45,5 @@ impl MidiInputEvent {
 #[derive(Event, Message, Clone, Debug)]
 pub enum MidiDeviceEvent {
     Connected { name: String },
-    Disconnected,
+    Disconnected { name: String },
 }
