@@ -87,9 +87,9 @@ pub use tutti::{
 pub use tutti::{SamplerLooping, SamplerSpeed};
 
 pub use crate::graph::{
-    commit_graph, crossfade_audio_node, reconcile_node_despawn, reconcile_params,
-    reconcile_sidechain_links, GraphDirty, TuttiGraphPlugin, GraphReconcileSystems, SidechainOf,
-    SidechainSources, SpawnAudioNode,
+    commit_graph, crossfade_audio_node, reconcile_audio_routing, reconcile_node_despawn,
+    reconcile_params, reconcile_sidechain_links, AudioFedBy, AudioFeedsTo, GraphDirty,
+    GraphReconcileSystems, SidechainOf, SidechainSources, SpawnAudioNode, TuttiGraphPlugin,
 };
 #[cfg(feature = "sampler")]
 pub use crate::graph::{

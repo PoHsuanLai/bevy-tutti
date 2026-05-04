@@ -8,6 +8,7 @@
 //! - [`reconcile`] — `SpawnAudioNode` extension, `Volume`/`Pan`/`Mute` reconcile,
 //!   per-effect param reconcilers, `GraphReconcileSystems` ordering.
 //! - [`sidechain`] — `SidechainOf` relationship → port-1 wiring.
+//! - [`routing`] — `AudioFeedsTo` relationship → general port-to-port wiring.
 //! - [`pending_load`] — sampler pending-load promotion (sampler-gated).
 //! - [`scheduled`] — time-delayed MIDI dispatch (midi-gated).
 
@@ -15,6 +16,7 @@ use bevy_app::{App, Plugin, Update};
 use bevy_ecs::prelude::*;
 
 pub mod reconcile;
+pub mod routing;
 pub mod sidechain;
 
 #[cfg(feature = "sampler")]
@@ -36,6 +38,7 @@ pub use reconcile::{
     reconcile_filter_params, reconcile_gate_params,
 };
 
+pub use routing::{reconcile_audio_routing, AudioFedBy, AudioFeedsTo};
 pub use sidechain::{reconcile_sidechain_links, SidechainOf, SidechainSources};
 
 #[cfg(feature = "sampler")]
@@ -72,6 +75,7 @@ impl Plugin for TuttiGraphPlugin {
                 reconcile_node_despawn.in_set(GraphReconcileSystems::Despawn),
                 commit_graph.in_set(GraphReconcileSystems::Commit),
                 reconcile_sidechain_links.in_set(GraphReconcileSystems::Spawn),
+                reconcile_audio_routing.in_set(GraphReconcileSystems::Spawn),
             ),
         );
 
