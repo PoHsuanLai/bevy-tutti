@@ -162,7 +162,7 @@ impl Plugin for TuttiPlugin {
                 } = engine;
 
                 app.insert_resource(TuttiGraphRes(graph));
-                app.insert_resource(TuttiDriverRes::new(driver));
+                app.insert_non_send_resource(TuttiDriverRes::new(driver));
                 app.insert_resource(TransportRes(transport));
                 app.insert_resource(MeteringRes(metering));
 

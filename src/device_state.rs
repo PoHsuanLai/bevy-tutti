@@ -25,14 +25,12 @@ impl Default for AudioDeviceState {
 }
 
 pub fn device_state_sync_system(
-    driver: Option<Res<TuttiDriverRes>>,
+    driver: Option<NonSend<TuttiDriverRes>>,
     config: Option<Res<AudioConfig>>,
     mut state: ResMut<AudioDeviceState>,
 ) {
     let Some(driver) = driver else { return };
-    if let Ok(d) = driver.0.lock() {
-        state.is_running = d.is_running();
-    }
+    state.is_running = driver.0.is_running();
     if let Some(cfg) = config {
         state.channels = cfg.channels;
     }
@@ -40,15 +38,13 @@ pub fn device_state_sync_system(
 
 /// One-shot startup system: enumerate devices once.
 pub fn device_state_init_system(
-    driver: Option<Res<TuttiDriverRes>>,
+    driver: Option<NonSend<TuttiDriverRes>>,
     mut state: ResMut<AudioDeviceState>,
 ) {
     let Some(driver) = driver else { return };
 
-    if let Ok(d) = driver.0.lock() {
-        if let Ok(name) = d.device_name() {
-            state.current_device = name;
-        }
+    if let Ok(name) = driver.0.device_name() {
+        state.current_device = name;
     }
     if let Ok(devices) = tutti::TuttiDriver::devices() {
         state.output_devices = devices.map(|d| d.name).collect();

@@ -4,9 +4,10 @@
 //! can take only the ones they need. The wrappers are thin newtypes; most
 //! provide `Deref` to the inner handle.
 //!
-//! Resources that wrap explicit interior mutability (`TuttiGraphRes`,
-//! `TuttiDriverRes`, `PluginsRes`) intentionally skip `Deref` — the call
-//! site should be visible (`graph.0`, `driver.0.lock()`, …).
+//! `TuttiGraphRes` skips `Deref` so `.0` access keeps the per-frame
+//! commit boundary visible. `TuttiDriverRes` is a non-send resource
+//! (`cpal::Stream` is not `Sync`) — accessed via `NonSend` /
+//! `NonSendMut`, not `Res` / `ResMut`.
 
 use bevy_ecs::prelude::*;
 use bevy_reflect::prelude::*;
@@ -41,19 +42,19 @@ pub struct TuttiGraphRes(pub TuttiGraph);
 
 /// Owns the CPAL stream lifecycle (device selection, restart, enumeration).
 ///
-/// The inner `TuttiDriver` holds a `cpal::Stream` which is `Send` but not
-/// `Sync` (CPAL streams are not reentrant). Wrapping in a `Mutex` gives us a
-/// `Resource`-compatible (`Send + Sync`) handle; in practice driver
-/// operations (`set_device` / `restart`) are infrequent and exclusive.
-///
-/// Intentionally no `Deref`: callers `.0.lock()` so the mutex boundary is
-/// visible at the call site.
-#[derive(Resource)]
-pub struct TuttiDriverRes(pub std::sync::Mutex<TuttiDriver>);
+/// `TuttiDriver` holds a `cpal::Stream` which is `Send` but **not** `Sync`
+/// on every CPAL backend that matters (CoreAudio, ALSA — Stream wraps a
+/// thread-pinned platform handle). Inserted as a non-send resource and
+/// accessed via `NonSend<TuttiDriverRes>` / `NonSendMut<TuttiDriverRes>`
+/// so Bevy pins the systems that touch it to the main thread — same
+/// pattern Bevy uses for `Window` / `AudioOutput`. Driver operations
+/// (`set_device`, `restart`, device enumeration) are user-driven and
+/// infrequent, so the main-thread pin has no perf impact.
+pub struct TuttiDriverRes(pub TuttiDriver);
 
 impl TuttiDriverRes {
     pub fn new(driver: TuttiDriver) -> Self {
-        Self(std::sync::Mutex::new(driver))
+        Self(driver)
     }
 }
 
@@ -173,19 +174,17 @@ pub struct PluginEditorMainThread;
 /// scan-dir config; systems reach in to `register_bundled_plugin`,
 /// `unregister_bundled_plugins`, `rescan`, etc.
 ///
-/// Wrapped in a `Mutex` because `Plugins` carries a `Box<dyn PluginCatalog>`
-/// which is `Send` but not `Sync`. Operations on it are infrequent
-/// (extension activation, catalog rescan) so the lock is cheap.
-///
-/// Intentionally no `Deref`: callers `.0.lock()` so the mutex boundary is
-/// visible at the call site.
+/// `Plugins` is `Send + Sync` (the `PluginCatalog` trait carries
+/// `Send + Sync` supertraits, which propagate through `Box<dyn ...>`), so
+/// Bevy's `ResMut<PluginsRes>` exclusivity is the only synchronization
+/// needed — no extra `Mutex`.
 #[cfg(feature = "plugin")]
 #[derive(Resource)]
-pub struct PluginsRes(pub std::sync::Mutex<tutti::plugin::catalog::Plugins>);
+pub struct PluginsRes(pub tutti::plugin::catalog::Plugins);
 
 #[cfg(feature = "plugin")]
 impl PluginsRes {
     pub fn new(plugins: tutti::plugin::catalog::Plugins) -> Self {
-        Self(std::sync::Mutex::new(plugins))
+        Self(plugins)
     }
 }
