@@ -42,7 +42,7 @@ impl Plugin for TuttiDspPlugin {
         {
             use crate::graph::reconcile::{
                 reconcile_chorus_params, reconcile_compressor_params, reconcile_delay_params,
-                reconcile_filter_params, reconcile_gate_params, GraphReconcileSet,
+                reconcile_filter_params, reconcile_gate_params, GraphReconcileSystems,
             };
 
             app.add_systems(
@@ -54,11 +54,11 @@ impl Plugin for TuttiDspPlugin {
                     dsp_reverb_system,
                     dsp_delay_system,
                     dsp_chorus_system,
-                    reconcile_filter_params.in_set(GraphReconcileSet::Params),
-                    reconcile_delay_params.in_set(GraphReconcileSet::Params),
-                    reconcile_chorus_params.in_set(GraphReconcileSet::Params),
-                    reconcile_compressor_params.in_set(GraphReconcileSet::Params),
-                    reconcile_gate_params.in_set(GraphReconcileSet::Params),
+                    reconcile_filter_params.in_set(GraphReconcileSystems::Params),
+                    reconcile_delay_params.in_set(GraphReconcileSystems::Params),
+                    reconcile_chorus_params.in_set(GraphReconcileSystems::Params),
+                    reconcile_compressor_params.in_set(GraphReconcileSystems::Params),
+                    reconcile_gate_params.in_set(GraphReconcileSystems::Params),
                 ),
             );
         }

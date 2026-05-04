@@ -2,6 +2,7 @@
 
 use bevy_ecs::prelude::*;
 use bevy_log::warn;
+use bevy_reflect::prelude::*;
 
 use crate::native_window::attach_child_window;
 use crate::resources::PluginEditorMainThread;
@@ -12,7 +13,10 @@ use crate::resources::PluginEditorMainThread;
 /// control parameters, open/close the editor, save/load state, etc.
 ///
 /// The audio node is tracked separately via `AudioEmitter`.
-#[derive(Component)]
+///
+/// Not `Debug` / `Reflect`: `PluginHandle` wraps a foreign plugin-control
+/// handle that doesn't implement `Debug` and isn't reflected.
+#[derive(Component, Clone)]
 pub struct PluginEmitter {
     pub handle: tutti::plugin::handles::PluginHandle,
 }
@@ -21,6 +25,9 @@ pub struct PluginEmitter {
 ///
 /// `plugin_editor_idle_system` calls `handle.editor_idle()` every frame
 /// for entities that have this component.
+///
+/// Not `Reflect`: `EditorCapabilities` and the macOS live-resize observer
+/// are foreign types.
 #[derive(Component)]
 pub struct PluginEditorOpen {
     /// The Bevy Window entity hosting the plugin editor.
@@ -43,20 +50,23 @@ pub struct PluginEditorOpen {
 
 /// Intermediate state: a Window has been spawned but `open_editor` hasn't
 /// been called yet (waiting for the native handle to become available).
-#[derive(Component)]
+#[derive(Component, Debug, Clone, Copy, PartialEq, Eq, Hash, Reflect)]
+#[reflect(Component)]
 pub struct PendingPluginEditor {
     pub window_entity: Entity,
 }
 
 /// Trigger component: insert on an entity with `PluginEmitter` to open
 /// the plugin's native GUI editor. Automatically removed after processing.
-#[derive(Component)]
+#[derive(Component, Debug, Default, Clone, Copy, PartialEq, Eq, Hash, Reflect)]
+#[reflect(Component, Default)]
 pub struct OpenPluginEditor;
 
 /// Trigger component: insert on an entity with `PluginEmitter` +
 /// `PluginEditorOpen` to close the plugin's native GUI editor.
 /// Automatically removed after processing.
-#[derive(Component)]
+#[derive(Component, Debug, Default, Clone, Copy, PartialEq, Eq, Hash, Reflect)]
+#[reflect(Component, Default)]
 pub struct ClosePluginEditor;
 
 /// Ticks `editor_idle()` on all plugins that have `PluginEditorOpen`.

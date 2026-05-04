@@ -10,7 +10,7 @@
 //!   the new value through a typed `node_mut::<T>` call.
 //! - [`commit_graph`] — `graph.commit()` once per frame iff any reconcile
 //!   system mutated the graph.
-//! - [`GraphReconcileSet`] — system-set ordering anchor for hosts that
+//! - [`GraphReconcileSystems`] — system-set ordering anchor for hosts that
 //!   want to schedule their own logic before/after reconciliation.
 
 use bevy_ecs::prelude::*;
@@ -38,7 +38,7 @@ use crate::plugin_host::PluginEmitter;
 /// runs them in the order: `Spawn` → `Params` → `Despawn` → `Commit`,
 /// all inside `Update`.
 #[derive(SystemSet, Debug, Clone, Copy, Hash, PartialEq, Eq)]
-pub enum GraphReconcileSet {
+pub enum GraphReconcileSystems {
     /// Initial spawn of new graph nodes (rare; mostly app-driven via
     /// [`SpawnAudioNode`]). Apps can hook here to populate parameter
     /// components on the same frame the node is created.
@@ -292,7 +292,7 @@ pub fn reconcile_plugin_params(
 // =============================================================================
 // Effect-family parameter reconcilers.
 //
-// Each one runs in `GraphReconcileSet::Params`, queries entities with
+// Each one runs in `GraphReconcileSystems::Params`, queries entities with
 // the right `NodeKind` and a Changed<X> on any param it owns, then
 // writes through the unit's typed setter (lock-free atomic store —
 // no graph mutation, so `GraphDirty` stays untouched).
@@ -558,18 +558,18 @@ mod tests {
         app.add_systems(
             bevy_app::Update,
             (
-                reconcile_params.in_set(GraphReconcileSet::Params),
-                reconcile_node_despawn.in_set(GraphReconcileSet::Despawn),
-                commit_graph.in_set(GraphReconcileSet::Commit),
+                reconcile_params.in_set(GraphReconcileSystems::Params),
+                reconcile_node_despawn.in_set(GraphReconcileSystems::Despawn),
+                commit_graph.in_set(GraphReconcileSystems::Commit),
             ),
         );
         app.configure_sets(
             bevy_app::Update,
             (
-                GraphReconcileSet::Spawn,
-                GraphReconcileSet::Params,
-                GraphReconcileSet::Despawn,
-                GraphReconcileSet::Commit,
+                GraphReconcileSystems::Spawn,
+                GraphReconcileSystems::Params,
+                GraphReconcileSystems::Despawn,
+                GraphReconcileSystems::Commit,
             )
                 .chain(),
         );
@@ -660,7 +660,7 @@ mod tests {
         // Add the sampler reconcile system on top of the base test_app set.
         app.add_systems(
             bevy_app::Update,
-            reconcile_sampler_params.in_set(GraphReconcileSet::Params),
+            reconcile_sampler_params.in_set(GraphReconcileSystems::Params),
         );
 
         // Build a tiny silent wave (1 channel, 1 sample) just to hand to the

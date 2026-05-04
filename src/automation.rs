@@ -7,16 +7,17 @@
 //! - [`AutomationLaneEmitter`] — marker for entities owning a lane node.
 //! - [`AutomationLaneNode`] — marker for entities holding a typed lane.
 //! - [`AutomationDrivesParam`] — relationship: "this lane drives a param on `target`."
-//! - [`reconcile_automation_writes`] — runs in `GraphReconcileSet::Params`
+//! - [`reconcile_automation_writes`] — runs in `GraphReconcileSystems::Params`
 //!   and writes lane values into target entities' parameter components.
 
 use bevy_app::{App, Plugin, Update};
 use bevy_ecs::prelude::*;
+use bevy_reflect::prelude::*;
 
 use tutti::automation::LiveAutomationLane;
 use tutti::core::ecs::{AudioNode, PluginParam, Volume};
 
-use crate::graph::reconcile::{reconcile_params, GraphReconcileSet};
+use crate::graph::reconcile::{reconcile_params, GraphReconcileSystems};
 use crate::resources::{TransportRes, TuttiGraphRes};
 
 /// Trigger component: spawn an entity with this to create an automation lane.
@@ -36,7 +37,10 @@ use crate::resources::{TransportRes, TuttiGraphRes};
 ///
 /// commands.spawn(AddAutomationLane { envelope });
 /// ```
-#[derive(Component)]
+///
+/// Not `Reflect`: `AutomationEnvelope` is a foreign type without
+/// `bevy_reflect` integration.
+#[derive(Component, Debug, Clone)]
 pub struct AddAutomationLane {
     pub envelope: tutti::automation::AutomationEnvelope<String>,
 }
@@ -58,7 +62,9 @@ impl AddAutomationLane {
 /// Added automatically by `automation_lane_system`. Use `node_id` to
 /// connect the lane's output to other graph nodes (e.g., a multiply node
 /// for volume automation).
-#[derive(Component)]
+///
+/// Not `Reflect`: `node_id` wraps a foreign fundsp `NodeId`.
+#[derive(Component, Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct AutomationLaneEmitter {
     pub node_id: tutti::NodeId,
 }
@@ -70,11 +76,12 @@ pub struct AutomationLaneEmitter {
 /// system uses it to filter the candidate set; a missing marker just means
 /// the lane is purely an audio source (no driven targets) and is skipped
 /// for parameter writes.
-#[derive(Component, Debug, Default, Clone, Copy)]
+#[derive(Component, Debug, Default, Clone, Copy, PartialEq, Eq, Hash, Reflect)]
+#[reflect(Component, Default)]
 pub struct AutomationLaneNode;
 
 /// Selector for *which* parameter on the target entity the lane writes into.
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Reflect)]
 pub enum AutomationParam {
     /// Writes into the target's [`Volume`] component.
     Volume,
@@ -96,7 +103,8 @@ pub enum AutomationParam {
 /// in iteration order wins, mirroring how multiple coincident automation
 /// writes work in any DAW. Hosts that need deterministic merging can wrap
 /// this in their own resolver and gate the write with a system order.
-#[derive(Component, Debug, Clone, Copy)]
+#[derive(Component, Debug, Clone, Copy, PartialEq, Eq, Hash, Reflect)]
+#[reflect(Component, Clone)]
 pub struct AutomationDrivesParam {
     pub target: Entity,
     pub param: AutomationParam,
@@ -134,7 +142,7 @@ pub fn automation_lane_system(
 /// Reads each automation lane's current value and writes it into the
 /// target entity's parameter component.
 ///
-/// Runs in [`GraphReconcileSet::Params`]. The downstream parameter
+/// Runs in [`GraphReconcileSystems::Params`]. The downstream parameter
 /// reconcilers (`reconcile_params`, `reconcile_plugin_params`, …) pick up
 /// the resulting `Changed<Volume>` / `Changed<PluginParam>` later in the
 /// same set and route it to the audio thread.
@@ -190,10 +198,13 @@ pub struct TuttiAutomationPlugin;
 
 impl Plugin for TuttiAutomationPlugin {
     fn build(&self, app: &mut App) {
+        app.register_type::<AutomationLaneNode>()
+            .register_type::<AutomationDrivesParam>()
+            .register_type::<AutomationParam>();
         app.add_systems(Update, automation_lane_system).add_systems(
             Update,
             reconcile_automation_writes
-                .in_set(GraphReconcileSet::Params)
+                .in_set(GraphReconcileSystems::Params)
                 .before(reconcile_params),
         );
     }

@@ -15,6 +15,12 @@ pub struct TuttiMidiPlugin;
 
 impl Plugin for TuttiMidiPlugin {
     fn build(&self, app: &mut App) {
+        app.register_type::<components::MidiSequenceNote>();
+
+        #[cfg(feature = "midi-hardware")]
+        app.register_type::<components::ConnectMidiDevice>()
+            .register_type::<components::DisconnectMidiDevice>();
+
         let (sender, receiver) = crossbeam_channel::unbounded();
         app.insert_resource(systems::MidiInputObserver { receiver });
         app.insert_resource(systems::MidiObserverSender {

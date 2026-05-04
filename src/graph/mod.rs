@@ -1,12 +1,12 @@
 //! Graph reconciliation: entity-as-node component changes → tutti graph ops.
 //!
 //! The keystone duty for `bevy-tutti`. Other duties (DSP, automation,
-//! plugin host, sampler) all schedule against [`reconcile::GraphReconcileSet`]
+//! plugin host, sampler) all schedule against [`reconcile::GraphReconcileSystems`]
 //! to interleave their per-frame work between spawn → params → despawn → commit.
 //!
 //! Sub-concepts:
 //! - [`reconcile`] — `SpawnAudioNode` extension, `Volume`/`Pan`/`Mute` reconcile,
-//!   per-effect param reconcilers, `GraphReconcileSet` ordering.
+//!   per-effect param reconcilers, `GraphReconcileSystems` ordering.
 //! - [`sidechain`] — `SidechainOf` relationship → port-1 wiring.
 //! - [`pending_load`] — sampler pending-load promotion (sampler-gated).
 //! - [`scheduled`] — time-delayed MIDI dispatch (midi-gated).
@@ -24,7 +24,7 @@ pub mod scheduled;
 
 pub use reconcile::{
     commit_graph, crossfade_audio_node, reconcile_node_despawn, reconcile_params, GraphDirty,
-    GraphReconcileSet, SpawnAudioNode,
+    GraphReconcileSystems, SpawnAudioNode,
 };
 #[cfg(feature = "sampler")]
 pub use reconcile::reconcile_sampler_params;
@@ -57,10 +57,10 @@ impl Plugin for TuttiGraphPlugin {
         app.init_resource::<GraphDirty>().configure_sets(
             Update,
             (
-                GraphReconcileSet::Spawn,
-                GraphReconcileSet::Params,
-                GraphReconcileSet::Despawn,
-                GraphReconcileSet::Commit,
+                GraphReconcileSystems::Spawn,
+                GraphReconcileSystems::Params,
+                GraphReconcileSystems::Despawn,
+                GraphReconcileSystems::Commit,
             )
                 .chain(),
         );
@@ -68,10 +68,10 @@ impl Plugin for TuttiGraphPlugin {
         app.add_systems(
             Update,
             (
-                reconcile_params.in_set(GraphReconcileSet::Params),
-                reconcile_node_despawn.in_set(GraphReconcileSet::Despawn),
-                commit_graph.in_set(GraphReconcileSet::Commit),
-                reconcile_sidechain_links.in_set(GraphReconcileSet::Spawn),
+                reconcile_params.in_set(GraphReconcileSystems::Params),
+                reconcile_node_despawn.in_set(GraphReconcileSystems::Despawn),
+                commit_graph.in_set(GraphReconcileSystems::Commit),
+                reconcile_sidechain_links.in_set(GraphReconcileSystems::Spawn),
             ),
         );
 
@@ -80,11 +80,11 @@ impl Plugin for TuttiGraphPlugin {
             app.init_resource::<WaveImportQueue>().add_systems(
                 Update,
                 (
-                    reconcile_sampler_params.in_set(GraphReconcileSet::Params),
+                    reconcile_sampler_params.in_set(GraphReconcileSystems::Params),
                     poll_wave_imports,
                     promote_pending_samplers
                         .after(poll_wave_imports)
-                        .in_set(GraphReconcileSet::Spawn),
+                        .in_set(GraphReconcileSystems::Spawn),
                 ),
             );
         }
@@ -92,7 +92,7 @@ impl Plugin for TuttiGraphPlugin {
         #[cfg(feature = "plugin")]
         app.add_systems(
             Update,
-            reconcile_plugin_params.in_set(GraphReconcileSet::Params),
+            reconcile_plugin_params.in_set(GraphReconcileSystems::Params),
         );
 
         #[cfg(all(feature = "plugin", feature = "vst2"))]
@@ -100,7 +100,7 @@ impl Plugin for TuttiGraphPlugin {
             use crate::vst2_load::process_pending_vst2_builds;
             app.add_systems(
                 Update,
-                process_pending_vst2_builds.in_set(GraphReconcileSet::Spawn),
+                process_pending_vst2_builds.in_set(GraphReconcileSystems::Spawn),
             );
         }
 

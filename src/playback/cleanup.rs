@@ -1,6 +1,7 @@
 //! Finished-sample detection: removes nodes from graph and (optionally) despawns entities.
 
 use bevy_ecs::prelude::*;
+use bevy_reflect::prelude::*;
 
 #[cfg(feature = "sampler")]
 use tutti::sampler::SamplerUnit;
@@ -12,7 +13,8 @@ use crate::resources::TuttiGraphRes;
 use super::emitter::{AudioEmitter, AudioPlaybackState};
 
 /// Marker component: entity will be despawned when its sample finishes playing.
-#[derive(Component)]
+#[derive(Component, Debug, Default, Clone, Copy, PartialEq, Eq, Hash, Reflect)]
+#[reflect(Component, Default)]
 pub struct DespawnOnFinish;
 
 /// Polls tutti graph for finished (non-looping) samples and updates

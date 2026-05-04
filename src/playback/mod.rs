@@ -41,6 +41,11 @@ impl Plugin for TuttiPlaybackPlugin {
         app.init_asset::<WaveAsset>()
             .register_asset_loader(TuttiLoader::<WaveAsset>::default());
 
+        app.register_type::<AudioPlaybackState>()
+            .register_type::<DespawnOnFinish>()
+            .register_type::<AudioVolume>()
+            .register_type::<PlayAudio>();
+
         #[cfg(feature = "sampler")]
         {
             app.init_asset::<StreamingSample>()

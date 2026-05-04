@@ -7,7 +7,7 @@
 //! on the target side.
 //!
 //! The reconcile system [`reconcile_sidechain_links`] runs in
-//! [`GraphReconcileSet::Spawn`]: on `Added<SidechainOf>` it looks up
+//! [`GraphReconcileSystems::Spawn`]: on `Added<SidechainOf>` it looks up
 //! both entities' [`AudioNode`] and calls
 //! `graph.connect(src_node, 0, target_node, 1)`. On
 //! `RemovedComponents<SidechainOf>` it disconnects the same port.
@@ -138,7 +138,7 @@ pub fn reconcile_sidechain_links(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::graph::reconcile::GraphReconcileSet;
+    use crate::graph::reconcile::GraphReconcileSystems;
     use bevy_app::App;
     use tutti::TuttiEngine;
 
@@ -152,16 +152,16 @@ mod tests {
         app.configure_sets(
             bevy_app::Update,
             (
-                GraphReconcileSet::Spawn,
-                GraphReconcileSet::Params,
-                GraphReconcileSet::Despawn,
-                GraphReconcileSet::Commit,
+                GraphReconcileSystems::Spawn,
+                GraphReconcileSystems::Params,
+                GraphReconcileSystems::Despawn,
+                GraphReconcileSystems::Commit,
             )
                 .chain(),
         );
         app.add_systems(
             bevy_app::Update,
-            reconcile_sidechain_links.in_set(GraphReconcileSet::Spawn),
+            reconcile_sidechain_links.in_set(GraphReconcileSystems::Spawn),
         );
         app
     }

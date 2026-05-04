@@ -2,6 +2,7 @@
 
 use bevy_app::{App, Plugin, Update};
 use bevy_ecs::prelude::*;
+use bevy_reflect::prelude::*;
 
 use crate::resources::{AudioConfig, TuttiGraphRes};
 
@@ -10,7 +11,10 @@ use crate::resources::{AudioConfig, TuttiGraphRes};
 /// The `export_start_system` processes entities with `Added<StartExport>`,
 /// builds a `GraphExport`, calls `.to_file(path).spawn()`, and replaces
 /// this component with `ExportInProgress`.
-#[derive(Component)]
+///
+/// Not `Reflect`: `AudioFormat` / `Normalize` are foreign types from
+/// `tutti-export`.
+#[derive(Component, Debug, Clone)]
 pub struct StartExport {
     pub path: std::path::PathBuf,
     pub duration_seconds: Option<f64>,
@@ -51,15 +55,21 @@ impl StartExport {
     }
 }
 
+/// In-flight offline export. Holds the upstream handle that the
+/// `export_poll_system` polls each frame.
+///
+/// Not `Reflect`: the export `Handle` is foreign to `bevy_reflect`.
 #[derive(Component)]
 pub struct ExportInProgress {
     pub(crate) handle: tutti::export::Handle<tutti::export::Written>,
 }
 
-#[derive(Component)]
+#[derive(Component, Debug, Default, Clone, Copy, PartialEq, Eq, Hash, Reflect)]
+#[reflect(Component, Default)]
 pub struct ExportComplete;
 
-#[derive(Component)]
+#[derive(Component, Debug, Clone, Reflect)]
+#[reflect(Component, Clone)]
 pub struct ExportFailed {
     pub error: String,
 }
@@ -133,6 +143,8 @@ pub struct TuttiExportPlugin;
 
 impl Plugin for TuttiExportPlugin {
     fn build(&self, app: &mut App) {
+        app.register_type::<ExportComplete>()
+            .register_type::<ExportFailed>();
         app.add_systems(Update, (export_start_system, export_poll_system));
     }
 }

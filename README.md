@@ -71,7 +71,7 @@ fn control(transport: Res<TransportRes>, mut graph: ResMut<TuttiGraphRes>) {
 
 With the `bevy_ecs` integration baked into `tutti`, audio graph nodes can
 also be spawned as Bevy entities and tuned with normal `Changed<T>` queries.
-The reconcile pipeline (`GraphReconcileSet::{Spawn, Params, Despawn, Commit}`)
+The reconcile pipeline (`GraphReconcileSystems::{Spawn, Params, Despawn, Commit}`)
 translates component edits into graph operations and coalesces a single
 `graph.commit()` per frame.
 

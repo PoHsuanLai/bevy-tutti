@@ -37,6 +37,10 @@ impl Plugin for TuttiHostingPlugin {
             app.add_plugins(bevy_tokio_tasks::TokioTasksPlugin::default());
         }
 
+        app.register_type::<OpenPluginEditor>()
+            .register_type::<ClosePluginEditor>()
+            .register_type::<PendingPluginEditor>();
+
         app.insert_non_send_resource(crate::resources::PluginEditorMainThread);
 
         // Default plugin catalog: empty in-memory, no scan dirs. Apps

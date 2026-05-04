@@ -200,6 +200,10 @@ impl Plugin for TuttiPlugin {
         app.init_resource::<TransportState>();
         app.init_resource::<MasterMeterLevels>();
         app.init_resource::<AudioDeviceState>();
+        app.register_type::<TransportState>()
+            .register_type::<MasterMeterLevels>()
+            .register_type::<AudioDeviceState>()
+            .register_type::<crate::resources::AudioConfig>();
         app.add_systems(Startup, device_state::device_state_init_system);
         app.add_systems(
             Update,
@@ -213,11 +217,12 @@ impl Plugin for TuttiPlugin {
         #[cfg(feature = "sampler")]
         {
             app.init_resource::<ContentBounds>();
+            app.register_type::<ContentBounds>();
             app.add_systems(Update, content_bounds_sync_system);
         }
 
         // Sub-plugins. Order matters: TuttiGraphPlugin first (configures
-        // GraphReconcileSet that other plugins schedule against), then
+        // GraphReconcileSystems that other plugins schedule against), then
         // duty plugins.
         app.add_plugins(TuttiGraphPlugin);
         app.add_plugins(TuttiPlaybackPlugin);

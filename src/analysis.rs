@@ -4,19 +4,22 @@ use std::sync::Arc;
 
 use bevy_app::{App, Plugin, Update};
 use bevy_ecs::prelude::*;
+use bevy_reflect::prelude::*;
 
 use crate::resources::AnalysisRes;
 
 /// Trigger component: spawn an entity with this to enable live analysis.
 ///
 /// Processed by `live_analysis_control_system`, calls `engine.enable_live_analysis()`.
-#[derive(Component)]
+#[derive(Component, Debug, Default, Clone, Copy, PartialEq, Eq, Hash, Reflect)]
+#[reflect(Component, Default)]
 pub struct EnableLiveAnalysis;
 
 /// Trigger component: spawn an entity with this to disable live analysis.
 ///
 /// Processed by `live_analysis_control_system`, calls `engine.disable_live_analysis()`.
-#[derive(Component)]
+#[derive(Component, Debug, Default, Clone, Copy, PartialEq, Eq, Hash, Reflect)]
+#[reflect(Component, Default)]
 pub struct DisableLiveAnalysis;
 
 /// Live analysis state synced from Tutti via lock-free ArcSwap reads.
@@ -97,6 +100,8 @@ pub struct TuttiAnalysisPlugin;
 
 impl Plugin for TuttiAnalysisPlugin {
     fn build(&self, app: &mut App) {
+        app.register_type::<EnableLiveAnalysis>()
+            .register_type::<DisableLiveAnalysis>();
         app.init_resource::<LiveAnalysisData>().add_systems(
             Update,
             (live_analysis_control_system, live_analysis_sync_system),

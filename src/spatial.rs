@@ -8,6 +8,8 @@
 use bevy_app::{App, Plugin, Update};
 use bevy_ecs::prelude::*;
 use bevy_log::warn;
+use bevy_reflect::prelude::*;
+use bevy_transform::components::GlobalTransform;
 
 use tutti::sampler::SamplerUnit;
 use tutti::NodeId;
@@ -19,14 +21,23 @@ use crate::resources::TuttiGraphRes;
 ///
 /// Only one listener should exist at a time. Spatial audio positions
 /// are computed relative to this entity's `GlobalTransform`.
-#[derive(Component, Default)]
+#[derive(Component, Debug, Default, Clone, Copy, PartialEq, Eq, Hash, Reflect)]
+#[reflect(Component, Default)]
+#[require(GlobalTransform)]
 pub struct AudioListener;
 
 /// Enables 3D spatial audio for an emitter entity.
 ///
-/// Requires `GlobalTransform` on the same entity. The system lazily creates
-/// a `SpatialPannerNode` in tutti's graph and syncs position every frame.
-#[derive(Component)]
+/// Requires `GlobalTransform` on the same entity (auto-inserted via
+/// `#[require]`). [`AudioEmitter`] is also expected on the same entity, but
+/// is not auto-required because it has no meaningful `Default` (its
+/// `node_id` is filled in by the playback system once the wave loads).
+/// Spawn `SpatialAudio` alongside a `PlayAudio` trigger; the emitter shows
+/// up on the next frame.
+///
+/// Not `Reflect`: `panner_node_id` wraps a foreign fundsp `NodeId`.
+#[derive(Component, Debug, Clone)]
+#[require(GlobalTransform)]
 pub struct SpatialAudio {
     pub(crate) panner_node_id: Option<NodeId>,
     pub attenuation: AttenuationModel,
@@ -45,7 +56,7 @@ impl Default for SpatialAudio {
     }
 }
 
-#[derive(Debug, Clone, Copy, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, Reflect)]
 pub enum AttenuationModel {
     #[default]
     InverseDistance,
@@ -159,6 +170,8 @@ pub struct TuttiSpatialPlugin;
 
 impl Plugin for TuttiSpatialPlugin {
     fn build(&self, app: &mut App) {
+        app.register_type::<AudioListener>()
+            .register_type::<AttenuationModel>();
         app.add_systems(
             Update,
             spatial_audio_sync_system

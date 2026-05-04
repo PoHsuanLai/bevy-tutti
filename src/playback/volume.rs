@@ -1,6 +1,7 @@
 //! `AudioVolume` parameter sync to tutti's `SamplerUnit::set_gain`.
 
 use bevy_ecs::prelude::*;
+use bevy_reflect::prelude::*;
 
 #[cfg(feature = "sampler")]
 use tutti::sampler::SamplerUnit;
@@ -12,7 +13,8 @@ use crate::resources::TuttiGraphRes;
 use super::emitter::AudioEmitter;
 
 /// Volume control component. Synced to the tutti graph node by `audio_parameter_sync_system`.
-#[derive(Component)]
+#[derive(Component, Debug, Clone, Copy, PartialEq, Reflect)]
+#[reflect(Component, Default, Clone)]
 pub struct AudioVolume(pub f32);
 
 impl Default for AudioVolume {

@@ -1,9 +1,11 @@
 use bevy_ecs::prelude::*;
+use bevy_reflect::prelude::*;
 
 use crate::{AudioConfig, TuttiDriverRes};
 
 /// Audio device state synced from Tutti every frame.
-#[derive(Resource, Debug, Clone)]
+#[derive(Resource, Debug, Clone, Reflect)]
+#[reflect(Resource, Default, Clone)]
 pub struct AudioDeviceState {
     pub output_devices: Vec<String>,
     pub current_device: String,

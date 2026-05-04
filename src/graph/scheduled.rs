@@ -34,7 +34,9 @@ use crate::resources::MidiBusRes;
 ///
 /// The id is opaque — read it back via [`MidiSynthMarker::midi_unit_id`]
 /// when you need to call `MidiBus::queue`.
-#[derive(Component, Debug, Clone, Copy)]
+///
+/// Not `Reflect`: `MidiUnitId` is a foreign opaque id type.
+#[derive(Component, Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct MidiSynthMarker {
     pub midi_unit_id: MidiUnitId,
 }
@@ -59,6 +61,8 @@ impl MidiSynthMarker {
 /// One scheduled event per entity. Despawn happens automatically after
 /// dispatch, so the host can spawn an unbounded series without manual
 /// cleanup.
+///
+/// Not `Reflect`: `MidiEvent` is a foreign type from `tutti-midi`.
 #[derive(Component, Debug, Clone)]
 pub struct ScheduledMidi {
     pub target: Entity,

@@ -8,7 +8,7 @@ use bevy_ecs::prelude::*;
 /// creates a `Compressor` (mono or stereo via `Compressor::mono`/`Compressor::stereo`),
 /// adds it to the graph, and inserts `AudioEmitter`.
 #[cfg(feature = "dsp")]
-#[derive(Component)]
+#[derive(Component, Debug, Clone, Copy, PartialEq)]
 pub struct AddCompressor {
     pub threshold_db: f32,
     pub ratio: f32,
@@ -69,7 +69,7 @@ impl AddCompressor {
 /// creates a `Gate` (mono or stereo via `Gate::mono`/`Gate::stereo`), adds it to
 /// the graph, and inserts `AudioEmitter`.
 #[cfg(feature = "dsp")]
-#[derive(Component)]
+#[derive(Component, Debug, Clone, Copy, PartialEq)]
 pub struct AddGate {
     pub threshold_db: f32,
     pub attack: f32,
@@ -126,7 +126,7 @@ impl AddGate {
 /// The `dsp_lfo_system` processes entities with `Added<AddLfo>`,
 /// creates an `LfoNode`, adds it to the graph, and inserts `AudioEmitter`.
 /// If `beat_synced` is true, the LFO is wired to the engine's transport.
-#[derive(Component)]
+#[derive(Component, Debug, Clone, Copy, PartialEq)]
 pub struct AddLfo {
     pub shape: tutti::units::LfoShape,
     pub frequency: f32,

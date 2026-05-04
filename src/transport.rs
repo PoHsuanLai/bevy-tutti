@@ -1,9 +1,11 @@
 use bevy_ecs::prelude::*;
+use bevy_reflect::prelude::*;
 
 use crate::TransportRes;
 
 /// Transport state synced from Tutti every frame via lock-free atomics.
-#[derive(Resource, Debug, Clone)]
+#[derive(Resource, Debug, Clone, Reflect)]
+#[reflect(Resource, Default, Clone)]
 pub struct TransportState {
     pub tempo: f64,
     pub beat: f64,

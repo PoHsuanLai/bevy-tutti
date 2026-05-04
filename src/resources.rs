@@ -3,8 +3,13 @@
 //! Each subsystem of the engine is surfaced as its own resource so systems
 //! can take only the ones they need. The wrappers are thin newtypes; most
 //! provide `Deref` to the inner handle.
+//!
+//! Resources that wrap explicit interior mutability (`TuttiGraphRes`,
+//! `TuttiDriverRes`, `PluginsRes`) intentionally skip `Deref` — the call
+//! site should be visible (`graph.0`, `driver.0.lock()`, …).
 
 use bevy_ecs::prelude::*;
+use bevy_reflect::prelude::*;
 
 #[cfg(any(feature = "sampler", feature = "soundfont", feature = "neural"))]
 use std::sync::Arc;
@@ -18,7 +23,8 @@ use tutti::neural::Engine as NeuralEngine;
 use tutti::{TuttiDriver, TuttiGraph};
 
 /// Audio device configuration captured at engine build time.
-#[derive(Resource, Clone, Copy, Debug)]
+#[derive(Resource, Debug, Clone, Copy, PartialEq, Reflect)]
+#[reflect(Resource, Clone)]
 pub struct AudioConfig {
     pub sample_rate: f64,
     pub channels: usize,
@@ -26,6 +32,10 @@ pub struct AudioConfig {
 
 /// Owns the editable DSP graph. `&mut` edits; call `commit()` once per frame
 /// after a batch of edits to publish them to the audio thread.
+///
+/// Intentionally no `Deref`: graph mutation is paired with the per-frame
+/// `commit()` discipline (see `commit_graph`). Keeping access through `.0`
+/// makes the dirty/commit boundary visible at the call site.
 #[derive(Resource)]
 pub struct TuttiGraphRes(pub TuttiGraph);
 
@@ -35,6 +45,9 @@ pub struct TuttiGraphRes(pub TuttiGraph);
 /// `Sync` (CPAL streams are not reentrant). Wrapping in a `Mutex` gives us a
 /// `Resource`-compatible (`Send + Sync`) handle; in practice driver
 /// operations (`set_device` / `restart`) are infrequent and exclusive.
+///
+/// Intentionally no `Deref`: callers `.0.lock()` so the mutex boundary is
+/// visible at the call site.
 #[derive(Resource)]
 pub struct TuttiDriverRes(pub std::sync::Mutex<TuttiDriver>);
 
@@ -98,10 +111,26 @@ impl std::ops::Deref for MidiIoRes {
 #[derive(Resource, Clone)]
 pub struct SamplerRes(pub Arc<tutti::sampler::Sampler>);
 
+#[cfg(feature = "sampler")]
+impl std::ops::Deref for SamplerRes {
+    type Target = tutti::sampler::Sampler;
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
 /// SoundFont system (file cache + synth instantiation).
 #[cfg(feature = "soundfont")]
 #[derive(Resource, Clone)]
 pub struct SoundFontRes(pub Arc<tutti::synth::SoundFontSystem>);
+
+#[cfg(feature = "soundfont")]
+impl std::ops::Deref for SoundFontRes {
+    type Target = tutti::synth::SoundFontSystem;
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
 
 /// Analysis handle (transient / pitch / stereo analysis).
 ///
@@ -124,6 +153,14 @@ impl std::ops::Deref for AnalysisRes {
 #[derive(Resource, Clone)]
 pub struct NeuralRes(pub Arc<NeuralEngine>);
 
+#[cfg(feature = "neural")]
+impl std::ops::Deref for NeuralRes {
+    type Target = NeuralEngine;
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
 /// Non-Send marker resource that forces plugin editor systems to run on the
 /// main thread. AppKit (macOS), Win32, and X11 window operations must happen
 /// on the main thread. JUCE, VSTGUI, and other plugin GUI frameworks assume
@@ -139,6 +176,9 @@ pub struct PluginEditorMainThread;
 /// Wrapped in a `Mutex` because `Plugins` carries a `Box<dyn PluginCatalog>`
 /// which is `Send` but not `Sync`. Operations on it are infrequent
 /// (extension activation, catalog rescan) so the lock is cheap.
+///
+/// Intentionally no `Deref`: callers `.0.lock()` so the mutex boundary is
+/// visible at the call site.
 #[cfg(feature = "plugin")]
 #[derive(Resource)]
 pub struct PluginsRes(pub std::sync::Mutex<tutti::plugin::catalog::Plugins>);

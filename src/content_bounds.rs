@@ -1,9 +1,11 @@
 use bevy_ecs::prelude::*;
+use bevy_reflect::prelude::*;
 
 use crate::{TransportRes, TuttiGraphRes};
 
 /// Content duration bounds synced from Tutti every frame.
-#[derive(Resource, Debug, Clone, Copy, Default)]
+#[derive(Resource, Debug, Default, Clone, Copy, PartialEq, Reflect)]
+#[reflect(Resource, Default, Clone)]
 pub struct ContentBounds {
     pub end_beat: f64,
     /// Computed from end_beat and current tempo.

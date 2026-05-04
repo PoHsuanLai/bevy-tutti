@@ -4,6 +4,8 @@ use bevy_app::{App, Plugin, Update};
 use bevy_asset::{AssetApp, Assets, Handle};
 use bevy_ecs::prelude::*;
 
+use bevy_reflect::prelude::*;
+
 use crate::loader::TuttiLoader;
 use crate::playback::AudioEmitter;
 use crate::resources::{AudioConfig, TuttiGraphRes};
@@ -23,7 +25,8 @@ use crate::resources::MidiBusRes;
 /// let gm = asset_server.load("sounds/GeneralMidi.sf2");
 /// commands.spawn(PlaySoundFont::new(gm).preset(0));
 /// ```
-#[derive(Component)]
+#[derive(Component, Debug, Clone, Reflect)]
+#[reflect(Component, Clone)]
 pub struct PlaySoundFont {
     pub source: Handle<tutti::synth::SoundFontAsset>,
     pub preset: i32,
@@ -108,6 +111,7 @@ pub struct TuttiSoundFontPlugin;
 
 impl Plugin for TuttiSoundFontPlugin {
     fn build(&self, app: &mut App) {
+        app.register_type::<PlaySoundFont>();
         app.init_asset::<tutti::synth::SoundFontAsset>()
             .register_asset_loader(TuttiLoader::<tutti::synth::SoundFontAsset>::default())
             .add_systems(Update, soundfont_playback_system);

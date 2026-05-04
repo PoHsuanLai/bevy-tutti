@@ -7,6 +7,7 @@
 
 use bevy_app::{App, Plugin, Update};
 use bevy_ecs::prelude::*;
+use bevy_reflect::prelude::*;
 
 use crate::playback::audio_playback_system;
 
@@ -25,10 +26,20 @@ use crate::playback::audio_playback_system;
 ///     TimeStretch { stretch_factor: 0.5, pitch_cents: 0.0 },
 /// ));
 /// ```
-#[derive(Component)]
+#[derive(Component, Debug, Clone, Copy, PartialEq, Reflect)]
+#[reflect(Component, Clone)]
 pub struct TimeStretch {
     pub stretch_factor: f32,
     pub pitch_cents: f32,
+}
+
+impl Default for TimeStretch {
+    fn default() -> Self {
+        Self {
+            stretch_factor: 1.0,
+            pitch_cents: 0.0,
+        }
+    }
 }
 
 /// Lock-free control handles for a time-stretched audio entity.
@@ -36,7 +47,9 @@ pub struct TimeStretch {
 /// Inserted automatically by `audio_playback_system` when `TimeStretch` is
 /// present. Holds `Arc<AtomicF32>` handles for real-time parameter updates.
 /// Updated by `time_stretch_sync_system` when `TimeStretch` changes.
-#[derive(Component)]
+///
+/// Not `Reflect`: `Arc<AtomicF32>` is not reflected.
+#[derive(Component, Debug, Clone)]
 pub struct TimeStretchControl {
     pub(crate) stretch_factor: std::sync::Arc<tutti::core::AtomicF32>,
     pub(crate) pitch_cents: std::sync::Arc<tutti::core::AtomicF32>,
@@ -68,6 +81,7 @@ pub struct TuttiTimeStretchPlugin;
 
 impl Plugin for TuttiTimeStretchPlugin {
     fn build(&self, app: &mut App) {
+        app.register_type::<TimeStretch>();
         app.add_systems(Update, time_stretch_sync_system.after(audio_playback_system));
     }
 }

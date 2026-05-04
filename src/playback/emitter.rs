@@ -6,6 +6,7 @@ use bevy_asset::Assets;
 use bevy_ecs::prelude::*;
 #[cfg(feature = "sampler")]
 use bevy_log::warn;
+use bevy_reflect::prelude::*;
 
 use tutti::core::WaveAsset;
 use tutti::NodeId;
@@ -25,7 +26,11 @@ use super::cleanup::DespawnOnFinish;
 /// Added automatically by `audio_playback_system` when a `PlayAudio` trigger
 /// is processed. Remove this component (or despawn the entity) to stop
 /// playback and clean up the graph node.
-#[derive(Component)]
+///
+/// Not `Reflect`: the wrapped fundsp `NodeId` is foreign and not reflected
+/// (matching `tutti::core::ecs::AudioNode`).
+#[derive(Component, Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[require(AudioPlaybackState)]
 pub struct AudioEmitter {
     pub node_id: NodeId,
 }
@@ -33,7 +38,8 @@ pub struct AudioEmitter {
 /// Playback state for audio emitters.
 ///
 /// Updated by `audio_cleanup_system` when a non-looping sample finishes.
-#[derive(Component, Default, Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Component, Default, Debug, Clone, Copy, PartialEq, Eq, Hash, Reflect)]
+#[reflect(Component, Default)]
 pub enum AudioPlaybackState {
     #[default]
     Stopped,
@@ -59,7 +65,8 @@ pub enum AudioPlaybackState {
 /// // Auto-despawn when finished
 /// commands.spawn(PlayAudio::once(handle).despawn_on_finish());
 /// ```
-#[derive(Component)]
+#[derive(Component, Debug, Clone, Reflect)]
+#[reflect(Component, Clone)]
 pub struct PlayAudio {
     pub source: Handle<WaveAsset>,
     pub looping: bool,

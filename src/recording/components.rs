@@ -5,7 +5,9 @@ use bevy_ecs::prelude::*;
 /// The `recording_start_system` processes entities with `Added<StartRecording>`,
 /// calls `engine.sampler().start_recording()`, replaces this component with
 /// `RecordingActive`, and emits a `RecordingEvent::Started`.
-#[derive(Component)]
+///
+/// Not `Reflect`: `Source` / `Mode` are foreign types from `tutti-sampler`.
+#[derive(Component, Debug, Clone, Copy)]
 pub struct StartRecording {
     pub channel_index: usize,
     pub source: tutti::sampler::capture::Source,
@@ -32,7 +34,7 @@ impl StartRecording {
 /// The `recording_stop_system` processes entities with `Added<StopRecording>`,
 /// calls `engine.sampler().stop_recording()`, removes `RecordingActive`,
 /// and emits a `RecordingEvent::Stopped` with the recorded data.
-#[derive(Component)]
+#[derive(Component, Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct StopRecording {
     pub channel_index: usize,
 }
@@ -41,7 +43,9 @@ pub struct StopRecording {
 ///
 /// Added automatically by `recording_start_system`. Removed when
 /// `StopRecording` is processed or recording stops.
-#[derive(Component)]
+///
+/// Not `Reflect`: `Source` / `Mode` are foreign types from `tutti-sampler`.
+#[derive(Component, Debug, Clone, Copy)]
 pub struct RecordingActive {
     pub channel_index: usize,
     pub source: tutti::sampler::capture::Source,

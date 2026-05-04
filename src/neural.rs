@@ -3,6 +3,7 @@
 use bevy_app::{App, Plugin, Update};
 use bevy_asset::{AssetApp, Assets, Handle};
 use bevy_ecs::prelude::*;
+use bevy_reflect::prelude::*;
 
 use crate::loader::TuttiStreamingLoader;
 use crate::playback::AudioEmitter;
@@ -21,7 +22,8 @@ use crate::resources::{NeuralRes, TuttiGraphRes};
 /// commands.spawn(PlayNeuralSynth::new(violin));
 /// ```
 #[cfg(feature = "midi")]
-#[derive(Component)]
+#[derive(Component, Debug, Clone, Reflect)]
+#[reflect(Component, Clone)]
 pub struct PlayNeuralSynth {
     pub source: Handle<tutti::neural::NeuralModel>,
 }
@@ -34,7 +36,8 @@ impl PlayNeuralSynth {
 }
 
 /// Trigger component: spawn an entity with this to create a neural effect.
-#[derive(Component)]
+#[derive(Component, Debug, Clone, Reflect)]
+#[reflect(Component, Clone)]
 pub struct PlayNeuralEffect {
     pub source: Handle<tutti::neural::NeuralModel>,
 }
@@ -46,7 +49,8 @@ impl PlayNeuralEffect {
 }
 
 /// Exposes neural subsystem health / performance to the UI.
-#[derive(Resource, Default, Debug)]
+#[derive(Resource, Debug, Default, Clone, Copy, PartialEq, Reflect)]
+#[reflect(Resource, Default)]
 pub struct NeuralStatusResource {
     pub is_enabled: bool,
     pub has_gpu: bool,
@@ -189,6 +193,11 @@ pub struct TuttiNeuralPlugin;
 
 impl Plugin for TuttiNeuralPlugin {
     fn build(&self, app: &mut App) {
+        app.register_type::<PlayNeuralEffect>()
+            .register_type::<NeuralStatusResource>();
+        #[cfg(feature = "midi")]
+        app.register_type::<PlayNeuralSynth>();
+
         app.init_asset::<tutti::neural::NeuralModel>()
             .register_asset_loader(TuttiStreamingLoader::<tutti::neural::NeuralModel>::default())
             .init_resource::<NeuralStatusResource>()

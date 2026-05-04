@@ -2,6 +2,7 @@
 
 use bevy_app::{App, Plugin, Startup, Update};
 use bevy_ecs::prelude::*;
+use bevy_reflect::prelude::*;
 
 use crate::resources::SamplerRes;
 
@@ -9,7 +10,8 @@ use crate::resources::SamplerRes;
 ///
 /// Processed by `audio_input_control_system`. Selects device, sets gain/monitoring,
 /// and requests capture start.
-#[derive(Component)]
+#[derive(Component, Debug, Clone, Copy, PartialEq, Reflect)]
+#[reflect(Component, Default, Clone)]
 pub struct EnableAudioInput {
     pub device_index: Option<usize>,
     pub monitoring: bool,
@@ -50,17 +52,19 @@ impl EnableAudioInput {
 /// Trigger component: spawn an entity with this to disable audio input capture.
 ///
 /// Processed by `audio_input_control_system`. Stops capture and disables monitoring.
-#[derive(Component)]
+#[derive(Component, Debug, Default, Clone, Copy, PartialEq, Eq, Hash, Reflect)]
+#[reflect(Component, Default)]
 pub struct DisableAudioInput;
 
 /// Audio input state synced from Tutti's sampler subsystem every frame.
-#[derive(Resource, Default)]
+#[derive(Resource, Debug, Default, Clone, Reflect)]
+#[reflect(Resource, Default)]
 pub struct AudioInputState {
     pub peak_level: f32,
     pub devices: Vec<AudioInputDeviceInfo>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Reflect)]
 pub struct AudioInputDeviceInfo {
     pub index: usize,
     pub name: String,
@@ -135,6 +139,10 @@ pub struct TuttiAudioInputPlugin;
 
 impl Plugin for TuttiAudioInputPlugin {
     fn build(&self, app: &mut App) {
+        app.register_type::<EnableAudioInput>()
+            .register_type::<DisableAudioInput>()
+            .register_type::<AudioInputState>()
+            .register_type::<AudioInputDeviceInfo>();
         app.init_resource::<AudioInputState>()
             .add_systems(Startup, audio_input_init_system)
             .add_systems(
