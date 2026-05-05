@@ -7,16 +7,16 @@ license = "MIT OR Apache-2.0"
 
 [dependencies]
 # Minimal Bevy (just ECS + App, no rendering)
-bevy_app = { version = "0.17", default-features = false }
-bevy_ecs = { version = "0.17", default-features = false }
-bevy_log = { version = "0.17", default-features = false }
-bevy_asset = { version = "0.17", default-features = false }
-bevy_reflect = { version = "0.17", default-features = false }
-bevy_transform = { version = "0.17", optional = true }
-bevy_window = { version = "0.17", optional = true }
+bevy_app = { version = "0.18", default-features = false }
+bevy_ecs = { version = "0.18", default-features = false }
+bevy_log = { version = "0.18", default-features = false }
+bevy_asset = { version = "0.18", default-features = false }
+bevy_reflect = { version = "0.18", default-features = false }
+bevy_transform = { version = "0.18", optional = true }
+bevy_window = { version = "0.18", optional = true }
 
 # Shared tokio runtime (from bevy-tokio-tasks)
-bevy-tokio-tasks = { version = "0.17", optional = true }
+bevy-tokio-tasks = { version = "0.18", optional = true }
 
 # Raw window handle for plugin editor parenting
 raw-window-handle = { version = "0.6", optional = true }
