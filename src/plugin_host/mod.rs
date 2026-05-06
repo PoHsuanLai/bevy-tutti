@@ -15,8 +15,8 @@ pub use crash::plugin_crash_detect_system;
 pub use editor::{
     plugin_editor_attach_system, plugin_editor_close_system, plugin_editor_idle_system,
     plugin_editor_open_system, plugin_editor_resize_request_system,
-    plugin_editor_window_resize_system, ClosePluginEditor, OpenPluginEditor, PendingPluginEditor,
-    PluginEditorOpen, PluginEmitter,
+    plugin_editor_window_close_system, plugin_editor_window_resize_system, ClosePluginEditor,
+    OpenPluginEditor, PendingPluginEditor, PluginEditorOpen, PluginEmitter,
 };
 
 /// Bevy plugin: plugin editor lifecycle + crash detection + plugin
@@ -61,6 +61,7 @@ impl Plugin for TuttiHostingPlugin {
                 plugin_editor_idle_system,
                 plugin_editor_resize_request_system.after(plugin_editor_idle_system),
                 plugin_editor_window_resize_system.after(plugin_editor_resize_request_system),
+                plugin_editor_window_close_system,
                 plugin_crash_detect_system,
             ),
         );

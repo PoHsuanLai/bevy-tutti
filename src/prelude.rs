@@ -121,8 +121,8 @@ pub use tutti::midi::MidiIo;
 pub use crate::plugin_host::{
     plugin_crash_detect_system, plugin_editor_attach_system, plugin_editor_close_system,
     plugin_editor_idle_system, plugin_editor_open_system, plugin_editor_resize_request_system,
-    plugin_editor_window_resize_system, ClosePluginEditor, OpenPluginEditor, PendingPluginEditor,
-    PluginEditorOpen, PluginEmitter, TuttiHostingPlugin,
+    plugin_editor_window_close_system, plugin_editor_window_resize_system, ClosePluginEditor,
+    OpenPluginEditor, PendingPluginEditor, PluginEditorOpen, PluginEmitter, TuttiHostingPlugin,
 };
 #[cfg(feature = "plugin")]
 pub use tutti::plugin::catalog::{

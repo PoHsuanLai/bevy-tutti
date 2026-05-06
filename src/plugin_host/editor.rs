@@ -358,3 +358,27 @@ pub fn plugin_editor_close_system(
             .remove::<PluginEditorOpen>();
     }
 }
+
+/// Handles the OS close button on plugin editor windows.
+///
+/// When a plugin editor window receives a `WindowCloseRequested`, this routes
+/// the close through `ClosePluginEditor` on the plugin entity (so the native
+/// `close_editor()` call runs before the window despawns) and removes the
+/// `ClosingWindow` marker so Bevy's default `close_when_requested` doesn't
+/// despawn the window out from under us.
+pub fn plugin_editor_window_close_system(
+    mut commands: Commands,
+    mut close_events: bevy_ecs::message::MessageReader<bevy_window::WindowCloseRequested>,
+    editors: Query<(Entity, &PluginEditorOpen)>,
+) {
+    for event in close_events.read() {
+        for (entity, editor) in editors.iter() {
+            if editor.editor_window == event.window {
+                commands
+                    .entity(event.window)
+                    .remove::<bevy_window::ClosingWindow>();
+                commands.entity(entity).insert(ClosePluginEditor);
+            }
+        }
+    }
+}
