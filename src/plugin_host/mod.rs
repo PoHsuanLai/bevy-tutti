@@ -33,10 +33,6 @@ pub struct TuttiHostingPlugin;
 
 impl Plugin for TuttiHostingPlugin {
     fn build(&self, app: &mut App) {
-        if !app.is_plugin_added::<bevy_tokio_tasks::TokioTasksPlugin>() {
-            app.add_plugins(bevy_tokio_tasks::TokioTasksPlugin::default());
-        }
-
         app.register_type::<OpenPluginEditor>()
             .register_type::<ClosePluginEditor>()
             .register_type::<PendingPluginEditor>();
