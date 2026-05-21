@@ -1,7 +1,6 @@
 //! Generic Bevy `AssetLoader` adapters over the host-agnostic tutti asset
 //! traits. One impl each covers every current and future tutti loadable —
-//! replaces the per-type `TuttiAudioLoader` / `Sf2Loader` / `NeuralModelLoader`
-//! wrapper pattern.
+//! replaces the per-type `TuttiAudioLoader` / `Sf2Loader` wrapper pattern.
 
 use std::marker::PhantomData;
 
