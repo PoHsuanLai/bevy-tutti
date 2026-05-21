@@ -12,8 +12,6 @@ pub use tutti::core::WaveAsset;
 pub use tutti::synth::SoundFontAsset;
 #[cfg(feature = "sampler")]
 pub use tutti::sampler::StreamingSample;
-#[cfg(feature = "neural")]
-pub use tutti::neural::NeuralModel;
 
 pub use crate::playback::{
     AudioEmitter, AudioPlaybackState, AudioVolume, DespawnOnFinish, PlayAudio, TuttiPlaybackPlugin,
@@ -54,14 +52,6 @@ pub use tutti::midi::{MpeMode, MpeZone, MpeZoneConfig};
 
 #[cfg(feature = "soundfont")]
 pub use crate::soundfont::{soundfont_playback_system, PlaySoundFont, TuttiSoundFontPlugin};
-
-#[cfg(feature = "neural")]
-pub use crate::neural::{
-    neural_effect_playback_system, neural_status_sync_system, TuttiNeuralPlugin, NeuralStatusResource,
-    PlayNeuralEffect,
-};
-#[cfg(all(feature = "neural", feature = "midi"))]
-pub use crate::neural::{neural_synth_playback_system, PlayNeuralSynth};
 
 pub use crate::metering::{metering_sync_system, MasterMeterLevels};
 pub use crate::transport::{transport_sync_system, TransportState};
@@ -134,9 +124,6 @@ pub use tutti::plugin::handles::PluginHandle;
 #[cfg(feature = "plugin")]
 pub use tutti::plugin::metadata::{ParameterFlags, ParameterInfo};
 
-#[cfg(feature = "neural")]
-pub use tutti::neural::Engine as NeuralEngine;
-
 #[cfg(feature = "sampler")]
 pub use crate::recording::{
     recording_start_system, recording_stop_system, RecordingActive, TuttiRecordingPlugin,
@@ -203,8 +190,6 @@ pub use crate::resources::SamplerRes;
 pub use crate::resources::SoundFontRes;
 #[cfg(feature = "analysis")]
 pub use crate::resources::AnalysisRes;
-#[cfg(feature = "neural")]
-pub use crate::resources::NeuralRes;
 #[cfg(feature = "plugin")]
 pub use crate::resources::PluginEditorMainThread;
 #[cfg(feature = "plugin")]

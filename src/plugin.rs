@@ -23,8 +23,6 @@ use crate::midi::TuttiMidiPlugin;
 use crate::spatial::TuttiSpatialPlugin;
 #[cfg(feature = "soundfont")]
 use crate::soundfont::TuttiSoundFontPlugin;
-#[cfg(feature = "neural")]
-use crate::neural::TuttiNeuralPlugin;
 #[cfg(feature = "sampler")]
 use crate::audio_input::TuttiAudioInputPlugin;
 #[cfg(feature = "sampler")]
@@ -156,8 +154,6 @@ impl Plugin for TuttiPlugin {
                     soundfont,
                     #[cfg(feature = "analysis")]
                     analysis,
-                    #[cfg(feature = "neural")]
-                    neural,
                     ..
                 } = engine;
 
@@ -185,11 +181,6 @@ impl Plugin for TuttiPlugin {
 
                 #[cfg(feature = "analysis")]
                 app.insert_resource(AnalysisRes(analysis));
-
-                #[cfg(feature = "neural")]
-                if let Some(n) = neural {
-                    app.insert_resource(NeuralRes(n));
-                }
             }
             Err(e) => {
                 error!("Failed to start Tutti Audio Engine: {}", e);
@@ -232,8 +223,6 @@ impl Plugin for TuttiPlugin {
         app.add_plugins(TuttiSpatialPlugin);
         #[cfg(feature = "soundfont")]
         app.add_plugins(TuttiSoundFontPlugin);
-        #[cfg(feature = "neural")]
-        app.add_plugins(TuttiNeuralPlugin);
         #[cfg(feature = "midi")]
         app.add_plugins(TuttiMidiPlugin);
         #[cfg(feature = "plugin")]

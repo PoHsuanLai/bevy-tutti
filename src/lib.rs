@@ -69,8 +69,6 @@ pub mod automation;
 mod export;
 #[cfg(feature = "midi")]
 mod midi;
-#[cfg(feature = "neural")]
-mod neural;
 #[cfg(feature = "sampler")]
 mod audio_input;
 #[cfg(feature = "sampler")]

@@ -12,15 +12,13 @@
 use bevy_ecs::prelude::*;
 use bevy_reflect::prelude::*;
 
-#[cfg(any(feature = "sampler", feature = "soundfont", feature = "neural"))]
+#[cfg(any(feature = "sampler", feature = "soundfont"))]
 use std::sync::Arc;
 
 #[cfg(feature = "midi")]
 use tutti::midi_runtime::MidiBus;
 #[cfg(feature = "midi-hardware")]
 use tutti::midi::MidiIo;
-#[cfg(feature = "neural")]
-use tutti::neural::Engine as NeuralEngine;
 use tutti::{TuttiDriver, TuttiGraph};
 
 /// Audio device configuration captured at engine build time.
@@ -143,20 +141,6 @@ pub struct AnalysisRes(pub tutti::analysis::AnalysisHandle);
 #[cfg(feature = "analysis")]
 impl std::ops::Deref for AnalysisRes {
     type Target = tutti::analysis::AnalysisHandle;
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
-
-/// Neural inference engine. Only inserted when a neural backend factory was
-/// supplied to the builder; absent otherwise.
-#[cfg(feature = "neural")]
-#[derive(Resource, Clone)]
-pub struct NeuralRes(pub Arc<NeuralEngine>);
-
-#[cfg(feature = "neural")]
-impl std::ops::Deref for NeuralRes {
-    type Target = NeuralEngine;
     fn deref(&self) -> &Self::Target {
         &self.0
     }
